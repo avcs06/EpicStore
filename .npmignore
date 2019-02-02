@@ -1,0 +1,9 @@
+docs
+dist
+rollup.config.js
+
+.babelrc
+.eslintignore
+.eslintrc
+.gitignore
+.nvmrc
