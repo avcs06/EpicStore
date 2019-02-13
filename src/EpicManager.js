@@ -27,10 +27,7 @@ function processCondition(condition) {
         condition.selector = state => state;
     }
 
-    const value = condition.value || initialConditionValue;
-    delete condition.value;
-    condition.prevValue = condition.nextValue = value;
-
+    condition.value = condition.value || initialConditionValue;
     return condition;
 }
 
@@ -48,19 +45,19 @@ function splitConditions([...conditions]) {
     return conditionsList.length ? conditionsList : [conditions];
 }
 
-export const register = function({ name, state, updaters }) {
+export const register = function({ name, state, scope, updaters }) {
     if (epics[name]) {
         throw new Error(`Epic with name ${name} is already registered`);
     }
 
-    epics[name] = { prevState: state, nextState: state };
+    epics[name] = { state, scope };
     updaters.forEach(({ conditions, handler }) => {
         conditions = conditions.map(processCondition);
         splitConditions(conditions).forEach(conditions => {
             const updater = { epic: name, handler, conditions };
-            conditions.forEach(condition => {
-                if (!updaters[condition.type]) updaters[condition.type] = [];
-                updaters[condition.type].push(updater);
+            conditions.forEach(({ type }) => {
+                if (!updaters[type]) updaters[type] = [];
+                updaters[type].push(updater);
             });
         });
     });
@@ -76,92 +73,127 @@ export const unregister = function(epic) {
     }
 };
 
-let sourceAction;
-let actionCache = {};
-const getHandlerParams = conditions => (
-    conditions.map(condition => {
-        if (actionCache.hasOwnProperty(condition.type)) {
-            condition.value = condition.selector(actionCache[condition.type]);
-        }
-
-        if (condition.value === initialConditionValue) {
-            return null;
-        }
-
-        return condition.value;
-    })
-);
-
-export const dispatch = function (action, internal) {
-    if (!internal) {
-        // Fresh dispatch cycle
-        actionCache = {};
-        sourceAction = action;
-    }
-
-    actionCache[action.type] = action.payload;
-    updaters[action.type].forEach(({ epic: epicName, conditions, handler }) => {
-        if (!conditions.every(condition => {
-            if (condition.optional) return true;
-
-            if (condition.type === action.type) {
-                return !internal || condition.selector(action.payload) !== condition.value;
+export const dispatch = (() => {
+    let sourceAction, hasError, actionCache, conditionCache, epicListenerCache;
+    const getHandlerParams = conditions => (
+        conditions.map(condition => {
+            if (actionCache.hasOwnProperty(condition.type)) {
+                condition._value = condition.selector(actionCache[condition.type]);
+                conditionCache.push(condition);
             }
 
-            return (
-                actionCache.hasOwnProperty(condition.type) ||
-                condition.passive && condition.value !== initialConditionValue
-            );
-        })) return;
+            return condition.hasOwnProperty('_value') ? condition._value : condition.value;
+        })
+    );
 
-        const epic = epics[epicName];
-        const { state, scope, actions } = handler(
-            getHandlerParams(conditions),
-            { state: epic.nextState, prevState: epic.prevState, sourceAction, currentAction: action }
-        );
+    const processAction = (action, external) => {
+        actionCache[action.type] = action.payload;
+        try {
+            (updaters[action.type] || []).forEach(({ epic: epicName, conditions, handler }) => {
+                if (!conditions.every(condition => {
+                    if (condition.type === action.type) {
+                        if (condition.passive) return false;
+                        return external || condition.selector(action.payload) !== condition.value;
+                    }
 
-        if (change) {
-            epic.nextState = { ...epic.nextState, ...change };
-            dispatch({ type: epicName, payload: epic.nextState }, true);
+                    return (
+                        actionCache.hasOwnProperty(condition.type) ||
+                        (condition.optional || condition.passive) && condition.value !== initialConditionValue
+                    );
+                })) return;
+
+                const epic = epics[epicName];
+                epic._state = epic._state || epic.state;
+                epic._scope = epic._scope || epic.scope;
+
+                const { state, scope, actions } = handler(getHandlerParams(conditions), {
+                    state: epic._state, prevState: epic.state,
+                    scope: epic._scope, prevScope: epic.scope,
+                    sourceAction, currentAction: action
+                });
+
+                if (scope) {
+                    epic._scope = { ...epic._scope, ...scope };
+                }
+
+                if (state) {
+                    epic._state = { ...epic._state, ...state };
+                    processAction({ type: epicName, payload: epic._state });
+                }
+
+                if (actions) {
+                    actions.forEach(action => processAction(action));
+                }
+            });
+        } catch (e) {
+            hasError = true;
+            throw e;
         }
+    };
 
-        if (actions) {
-            actions.forEach(action => dispatch(action, true));
-        }
-    });
+    return function (action) {
+        // Fresh dispatch cycle
+        hasError = false;
+        actionCache = {};
+        conditionCache = [];
+        sourceAction = action;
+        epicListenerCache = {};
 
-    if (!internal) {
+        // dipatch cycle
+        processAction(action, true);
+
         // End of dispatch cycle
         Object.keys(actionCache).forEach(actionType => {
-            const listeners = epicListeners[actionType] || [];
-            listeners.forEach(({ conditions, handler }) => {
-                if (conditions.some(condition => {
-                    condition.value !== condition.selector(actionCache[condition.type])
-                })) handler(getHandlerParams(conditions));
-            });
+            if (!hasError) {
+                const listeners = epicListeners[actionType] || [];
+                listeners.forEach(({ conditions, handler }) => {
+                    if (conditions.some(condition => {
+                        condition.value !== condition.selector(actionCache[condition.type])
+                    })) handler(getHandlerParams(conditions));
+                });
+            }
 
             const epic = epics[actionType];
-            if (epic) epic.prevState = epic.nextState;
+            if (epic) {
+                if (!hasError) {
+                    epic.state = epic._state;
+                    epic.scope = epic._scope;
+                }
+                delete epic._state;
+                delete epic._scope;
+            }
         });
-    }
-};
+
+        conditionCache.forEach(condition => {
+            if (!hasError) {
+                condition.value = condition._value;
+            }
+            delete condition._value;
+        });
+    };
+})();
 
 export const addListener = function (conditions, handler) {
+    const epicListener = { conditions, handler };
+
     conditions = conditions.map(processCondition);
-    conditions.forEach(condition => {
-        if (!epicListeners[condition.type]) epicListeners[condition.type] = [];
-        epicListeners[condition.type].push({ conditions, handler });
+    conditions.forEach(({ type }) => {
+        if (!epicListeners[type]) epicListeners[type] = [];
+        epicListeners[type].push(epicListener);
     });
 
     return function removeListener() {
-        conditions.forEach(condition => {
-            epicListeners[condition.type] = epicListeners[condition.type].filter(
-                listener =>  handler !== listener.handler
-            );
+        conditions.forEach(({ type }) => {
+            epicListeners[type] =
+                epicListeners[type].filter(listener =>  listener !== epicListener);
         });
     };
 };
 
 export const anyOf = function (...conditions) {
     return conditions;
+};
+
+export const getEpicState = function(epicName) {
+    return epics[epicName] || epics;
 };
