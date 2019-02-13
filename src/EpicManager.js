@@ -15,15 +15,26 @@ function processCondition(condition) {
     }
 
     if (!condition.type || condition.type !== 'string') {
-        throw new Error('Missing required property condition.type');
+        throw new Error('Missing required property: condition.type');
     }
 
-    condition.selector = memoize(condition.selector || (state => state), { max: 1 });
-    condition.value = condition.value || initialConditionValue;
+    if (condition.selector) {
+        if (typeof condition.selector !== 'function') {
+            throw new Error('Invalid Type: condition.selector should be of type function');
+        }
+        condition.selector = memoize(condition.selector, { max: 1 });
+    } else {
+        condition.selector = state => state;
+    }
+
+    const value = condition.value || initialConditionValue;
+    delete condition.value;
+    condition.prevValue = condition.nextValue = value;
+
     return condition;
 }
 
-function splitConditions(conditions) {
+function splitConditions([...conditions]) {
     const conditionsList = [];
     conditions.forEach((condition, i) => {
         if (condition.constructor === Array) {
@@ -46,12 +57,10 @@ export const register = function({ name, state, updaters }) {
     updaters.forEach(({ conditions, handler }) => {
         conditions = conditions.map(processCondition);
         splitConditions(conditions).forEach(conditions => {
+            const updater = { epic: name, handler, conditions };
             conditions.forEach(condition => {
                 if (!updaters[condition.type]) updaters[condition.type] = [];
-
-                updaters[condition.type].push({
-                    epic: name, handler, conditions
-                });
+                updaters[condition.type].push(updater);
             });
         });
     });
@@ -106,7 +115,7 @@ export const dispatch = function (action, internal) {
         })) return;
 
         const epic = epics[epicName];
-        const { change, actions } = handler(
+        const { state, scope, actions } = handler(
             getHandlerParams(conditions),
             { state: epic.nextState, prevState: epic.prevState, sourceAction, currentAction: action }
         );
@@ -137,14 +146,14 @@ export const dispatch = function (action, internal) {
     }
 };
 
-export const addEventListener = function (conditions, handler) {
+export const addListener = function (conditions, handler) {
     conditions = conditions.map(processCondition);
     conditions.forEach(condition => {
         if (!epicListeners[condition.type]) epicListeners[condition.type] = [];
         epicListeners[condition.type].push({ conditions, handler });
     });
 
-    return function removeEventListener() {
+    return function removeListener() {
         conditions.forEach(condition => {
             epicListeners[condition.type] = epicListeners[condition.type].filter(
                 listener =>  handler !== listener.handler
