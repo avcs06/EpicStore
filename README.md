@@ -1,5 +1,9 @@
+# IDEA
+An event based state management tool. Each epic should be an encapsulated entity, it's only communication to the outside universe should be through events.
+
 # Epic Manager
-A tool to manage epics, epic listeners and dispatch actions.
+ 
+The EpicManager is a tool to manage epics, epic listeners and dispatch actions.
 ```
 const EpicManager = require('@avcs/epicmanager')
 ```

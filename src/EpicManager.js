@@ -149,7 +149,7 @@ export const dispatch = (() => {
                 listeners.forEach(({ conditions, handler }) => {
                     if (conditions.some(condition => {
                         condition.value !== condition.selector(actionCache[condition.type])
-                    })) handler(getHandlerParams(conditions));
+                    })) handler(getHandlerParams(conditions), { sourceAction });
                 });
             }
 
