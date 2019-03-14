@@ -39,7 +39,7 @@ EpicManager.dispatch(<Action>)
 ```
 
 ## Updater
-`Object<conditions: Array<Condition>, handler: Function<Array<ConditionValue>, Object<state, scope, prevState, prevScope, sourceAction>>>`
+`Object<conditions: Array<Condition>, handler: Function<Array<ConditionValue>, Object<state, scope, prevState, prevScope, sourceAction, currentAction, dispatch>>>`
 
 An updater reacts to dispatched actions, handler will be executed if all the conditions are met.
 * An updater handler can either update state of the epic it is linked to or dispatch more actions or both.

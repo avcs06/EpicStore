@@ -51,9 +51,14 @@ export const register = function({ name, state, scope, updaters }) {
     }
 
     epics[name] = { state, scope };
-    updaters.forEach(({ conditions, handler }) => {
+    updaters.forEach(({ conditions, handler }, index) => {
         conditions = conditions.map(processCondition);
         splitConditions(conditions).forEach(conditions => {
+            if (!conditions.find(({ passive }) => !passive)) {
+                const noPassiveUpdaters = ' Updater should have atleast one non passive condition.';
+                throw new Error(`Updater[${handler.name || index}] of epic ${name} doesn't have active listeners.` + noPassiveUpdaters);
+            }
+
             const updater = { epic: name, handler, conditions };
             conditions.forEach(({ type }) => {
                 if (!updaters[type]) updaters[type] = [];
@@ -73,34 +78,36 @@ export const unregister = function(epic) {
     }
 };
 
-export const dispatch = (() => {
-    let sourceAction, hasError, actionCache, conditionCache, epicListenerCache;
-    const getHandlerParams = conditions => (
-        conditions.map(condition => {
-            if (actionCache.hasOwnProperty(condition.type)) {
-                condition._value = condition.selector(actionCache[condition.type]);
-                conditionCache.push(condition);
-            }
+const getSelectorValue = ({ selector }, { type, payload }) => selector(payload, type);
+const didConditionChange = condition => condition.hasOwnProperty('_value') && (condition._value !== condition.value);
 
-            return condition.hasOwnProperty('_value') ? condition._value : condition.value;
-        })
-    );
+export const dispatch = (() => {
+    let sourceAction, hasError, actionCache, conditionCache, inCycle, afterCycle, epicListenerCache;
+
+    const getHandlerParams = conditions => conditions.map(condition => (
+        condition.hasOwnProperty('_value') ? condition._value : condition.value
+    ));
 
     const processAction = (action, external) => {
         actionCache[action.type] = action.payload;
         try {
             (updaters[action.type] || []).forEach(({ epic: epicName, conditions, handler }) => {
-                if (!conditions.every(condition => {
-                    if (condition.type === action.type) {
-                        if (condition.passive) return false;
-                        return external || condition.selector(action.payload) !== condition.value;
-                    }
+                const activeCondition = conditions.find(({ type }) => action.type === type);
+                activeCondition._value = getSelectorValue(activeCondition, action);
+                conditionCache.push(activeCondition);
 
-                    return (
-                        actionCache.hasOwnProperty(condition.type) ||
-                        (condition.optional || condition.passive) && condition.value !== initialConditionValue
-                    );
-                })) return;
+                if (!external && !didConditionChange(activeCondition)) return;
+
+                if (activeCondition.passive && !conditions.some(condition => (
+                    !condition.passive && didConditionChange(condition)
+                ))) return;
+
+                if (!conditions.every(condition => (
+                    condition === activeCondition ||
+                    (condition.optional || condition.passive) &&
+                    condition.value !== initialConditionValue ||
+                    didConditionChange(condition)
+                ))) return;
 
                 const epic = epics[epicName];
                 epic._state = epic._state || epic.state;
@@ -109,7 +116,8 @@ export const dispatch = (() => {
                 const { state, scope, actions } = handler(getHandlerParams(conditions), {
                     state: epic._state, prevState: epic.state,
                     scope: epic._scope, prevScope: epic.scope,
-                    sourceAction, currentAction: action
+                    sourceAction, currentAction: action,
+                    dispatch: processAction
                 });
 
                 if (scope) {
@@ -132,7 +140,11 @@ export const dispatch = (() => {
     };
 
     return function (action) {
+        if (inCycle) return processAction(action, true);
+        if (afterCycle) throw new Error('Epic listeners should not dispatch new Actions');
+
         // Fresh dispatch cycle
+        inCycle = true;
         hasError = false;
         actionCache = {};
         conditionCache = [];
@@ -143,6 +155,9 @@ export const dispatch = (() => {
         processAction(action, true);
 
         // End of dispatch cycle
+        inCycle = false;
+        afterCycle = true;
+
         Object.keys(actionCache).forEach(actionType => {
             if (!hasError) {
                 const listeners = epicListeners[actionType] || [];
@@ -170,6 +185,8 @@ export const dispatch = (() => {
             }
             delete condition._value;
         });
+
+        afterCycle = false;
     };
 })();
 
