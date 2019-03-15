@@ -5,7 +5,7 @@ const updaters = {};
 const epicListeners = {};
 const initialConditionValue = Symbol('initialConditionValue');
 
-function processCondition(condition) {
+function processCondition(condition, index) {
     if (condition.constructor === Array) {
         return condition.map(processCondition);
     } else if (typeof condition === 'string') {
@@ -14,8 +14,8 @@ function processCondition(condition) {
         condition = { ...condition };
     }
 
-    if (!condition.type || condition.type !== 'string') {
-        throw new Error('Missing required property: condition.type');
+    if (!condition.type || typeof condition.type !== 'string') {
+        throw new Error('Missing required property: type. Condition[${index}]');
     }
 
     if (condition.selector) {
@@ -45,18 +45,28 @@ function splitConditions([...conditions]) {
     return conditionsList.length ? conditionsList : [conditions];
 }
 
-export const register = function({ name, state, scope, updaters }) {
+function makeError(info, message) {
+    const parts = [];
+    obj.epic && parts.push(`Epic: ${obj.epic}`);
+    obj.updater && parts.push(`Updater: ${obj.updater}`);
+    obj.condition && parts.push(`Condition: ${obj.condition}`);
+    return parts.join(' > ') + ' :: ' + message;
+};
+
+export const register = function({ name, state = {}, scope = {}, updaters = [] }) {
+    const errorInfo = { epic: name };
     if (epics[name]) {
-        throw new Error(`Epic with name ${name} is already registered`);
+        throw new Error(makeError(errorInfo, 'Epic with same name is already registered'));
     }
 
     epics[name] = { state, scope };
     updaters.forEach(({ conditions, handler }, index) => {
+        errorInfo.updater = handler.name || index;
         conditions = conditions.map(processCondition);
         splitConditions(conditions).forEach(conditions => {
             if (!conditions.find(({ passive }) => !passive)) {
                 const noPassiveUpdaters = ' Updater should have atleast one non passive condition.';
-                throw new Error(`Updater[${handler.name || index}] of epic ${name} doesn't have active listeners.` + noPassiveUpdaters);
+                throw new Error(makeError(errorInfo, noPassiveUpdaters));
             }
 
             const updater = { epic: name, handler, conditions };
@@ -213,4 +223,13 @@ export const anyOf = function (...conditions) {
 
 export const getEpicState = function(epicName) {
     return epics[epicName] || epics;
+};
+
+export default {
+    register,
+    unregister,
+    dispatch,
+    addListener,
+    anyOf,
+    getEpicState
 };
