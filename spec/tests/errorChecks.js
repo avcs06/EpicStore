@@ -8,22 +8,22 @@ const invariantError = message => {
   return error;
 };
 
-describe("Invalid Entries: should throw error ", function() {
+describe("Invalid Entries: should throw error", function() {
   it("on duplicate epic name", function() {
-    EpicManager.register({ name: 'Epic1' });
+    EpicManager.register({ name: 'INVALID_EPIC_1' });
     expect(() => {
-      EpicManager.register({ name: 'Epic1' });
+      EpicManager.register({ name: 'INVALID_EPIC_1' });
     }).toThrow(invariantError(Errors.duplicateEpic));
   });
 
   it("if no active listeners are passed", function () {
     expect(() => {
       EpicManager.register({
-        name: 'Epic2',
+        name: 'INVALID_EPIC_2',
         updaters: [
           new Updater([
-            { type: 'ACTION_1', passive: true },
-            { type: 'ACTION_2', passive: true },
+            { type: 'INVALID_ACTION_1', passive: true },
+            { type: 'INVALID_ACTION_2', passive: true },
           ], Function.prototype)
         ]
       });
@@ -33,7 +33,7 @@ describe("Invalid Entries: should throw error ", function() {
   it("on invalid conditions", function () {
     expect(() => {
       EpicManager.register({
-        name: 'Epic3',
+        name: 'INVALID_EPIC_3',
         updaters: [
           new Updater([
             { type: true },
@@ -44,10 +44,10 @@ describe("Invalid Entries: should throw error ", function() {
 
     expect(() => {
       EpicManager.register({
-        name: 'Epic4',
+        name: 'INVALID_EPIC_4',
         updaters: [
           new Updater([
-            { type: 'ACTION_1', selector: 'id' },
+            { type: 'INVALID_ACTION_3', selector: 'id' },
           ], Function.prototype)
         ]
       });
@@ -55,23 +55,25 @@ describe("Invalid Entries: should throw error ", function() {
   });
 
   it("on dispatching inside epic listener", function () {
+    debugger;
     EpicManager.register({
-      name: 'Epic5',
+      name: 'INVALID_EPIC_5',
       state: { counter: 1 },
       updaters: [
-        new Updater(['ACTION_1'], ([], { state }) => ({
-          state: state.counter + 1
+        new Updater(['INVALID_ACTION_4'], ([], { state }) => ({
+          state: {
+            counter: state.counter + 1
+          }
         }))
       ]
     });
 
-    EpicManager.addListener(['Epic5'], ([ { counter } ]) => {
-      console.log(counter);
-      EpicManager.dispatch({ type: 'ACTION_1' });
+    EpicManager.addListener(['INVALID_EPIC_5'], ([ { counter } ]) => {
+      EpicManager.dispatch({ type: 'INVALID_ACTION_1' });
     });
 
     expect(() => {
-      EpicManager.dispatch({ type: 'ACTION_1' });
-    }).toThrow(invariantError(Errors.noDispatchInEpicListener));
+      EpicManager.dispatch({ type: 'INVALID_ACTION_4' });
+    }).toThrow([invariantError(Errors.noDispatchInEpicListener)]);
   });
 });

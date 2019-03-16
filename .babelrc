@@ -3,12 +3,14 @@
         "commonjs": {
             "presets": [
                 [ "env", { "useBuiltIns": false } ]
-            ]
+            ],
+            "plugins": ["transform-object-rest-spread"]
         },
         "es": {
             "presets": [
                 [ "env", { "useBuiltIns": false, "modules": false } ]
-            ]
+            ],
+            "plugins": ["transform-object-rest-spread"]
         }
     }
 }
