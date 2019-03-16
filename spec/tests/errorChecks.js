@@ -76,4 +76,13 @@ describe("Invalid Entries: should throw error", function() {
       EpicManager.dispatch({ type: 'INVALID_ACTION_4' });
     }).toThrow([invariantError(Errors.noDispatchInEpicListener)]);
   });
+
+  it("on invalid epics", function() {
+    expect(() => {
+      EpicManager.register({ name: 'INVALID_EPIC_6', state: null });
+    }).toThrow(invariantError(Errors.invalidEpicState));
+    expect(() => {
+      EpicManager.register({ name: 'INVALID_EPIC_7', scope: null });
+    }).toThrow(invariantError(Errors.invalidEpicScope));
+  });
 });

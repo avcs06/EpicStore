@@ -4,8 +4,8 @@ import Updater from '../../src/Updater';
 export const makeCounterEpic = (epic, action, {
     extraConditions = [],
     withError = false,
-    stateChange = state => ({ counter: ++state.counter }),
-    scopeChange = scope => ({ counter: ++scope.counter }),
+    stateChange = state => ({ counter: state.counter + 1 }),
+    scopeChange = scope => ({ counter: scope.counter + 1 }),
     actionsToDispatch = []
 } = {}) => {
     EpicManager.register({

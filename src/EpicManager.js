@@ -1,6 +1,7 @@
 import memoize from 'memoizee';
 import invariant from 'invariant';
 import Errors from './Errors';
+import { freeze, unfreeze } from './Utilities';
 
 const epicRegistry = {};
 const updaterRegistry = {};
@@ -45,8 +46,10 @@ function splitConditions([...conditions]) {
 
 export const register = function({ name, state = {}, scope = {}, updaters = [] }) {
     invariant(!epicRegistry[name], Errors.duplicateEpic);
+    invariant(state !== null && typeof state === 'object', Errors.invalidEpicState);
+    invariant(scope !== null && typeof scope === 'object', Errors.invalidEpicScope);
 
-    epicRegistry[name] = { state, scope };
+    epicRegistry[name] = { state: freeze(state), scope: freeze(scope) };
     updaters.forEach(({ conditions, handler }, index) => {
         conditions = conditions.map(processCondition);
         splitConditions(conditions).forEach(conditions => {
@@ -106,29 +109,32 @@ export const dispatch = (() => {
             epic._scope = epic._scope || epic.scope;
 
             const { state, scope, actions } = handler(getHandlerParams(conditions), {
-                state: { ...epic._state }, prevState: { ...epic.state },
-                scope: { ...epic._scope }, prevScope: { ...epic.scope },
-                sourceAction: { ...sourceAction }, currentAction: { ...action },
-                dispatch: processAction
+                state: epic._state, prevState: epic.state,
+                scope: epic._scope, prevScope: epic.scope,
+                sourceAction, currentAction: action
             });
 
             if (scope) {
-                epic._scope = { ...epic._scope, ...scope };
+                epic._scope = freeze({ ...unfreeze(epic._scope), ...scope });
             }
 
             if (state) {
-                epic._state = { ...epic._state, ...state };
-                processAction({ type: epicName, payload: epic._state });
+                epic._state = freeze({ ...unfreeze(epic._state), ...state });
+                processAction(freeze({ type: epicName, payload: epic._state }));
             }
 
             if (actions) {
-                actions.forEach(action => processAction(action));
+                actions.forEach(action => processAction(freeze(action)));
             }
         });
     };
 
     return function (action) {
+        // validate action
         if (typeof action === 'string') action = { type: action };
+        action = freeze(action);
+
+        // Handle external actions during cycle
         if (inCycle) return processAction(action, true);
         invariant(!afterCycle, Errors.noDispatchInEpicListener);
 
@@ -137,7 +143,7 @@ export const dispatch = (() => {
         actionCache = {};
         conditionCache = [];
         sourceAction = action;
-        epicListenerCache = {};
+        epicListenerCache = [];
 
         // dipatch cycle
         let processingError;
@@ -155,15 +161,29 @@ export const dispatch = (() => {
         Object.keys(actionCache).forEach(actionType => {
             if (!processingError) {
                 const listeners = epicListeners[actionType] || [];
-                listeners.forEach(({ conditions, handler }) => {
-                    if (conditions.some(condition => (
-                        condition.value !== condition.selector(actionCache[condition.type])
-                    ))) {
+                listeners.forEach(listener => {
+                    if (listener.processed) return;
+
+                    let hasChange = false;
+                    const { conditions, handler } = listener;
+                    conditions.forEach(condition => {
+                        if (actionCache[condition.type]) {
+                            condition._value = getSelectorValue(condition, actionCache[condition.type]);
+                            if (!hasChange && condition._value !== condition.value) {
+                                hasChange = true;
+                            }
+                        }
+                    });
+
+                    if (hasChange) {
                         try {
-                            handler(getHandlerParams(conditions), { sourceAction: { ...sourceAction } });
+                            listener.processed = true;
+                            handler(getHandlerParams(conditions), { sourceAction });
                         } catch(e) {
+                            listener.hasError = true;
                             postProcessingErrors.push(e);
                         }
+                        epicListenerCache.push(listener);
                     }
                 });
             }
@@ -177,6 +197,17 @@ export const dispatch = (() => {
                 delete epic._state;
                 delete epic._scope;
             }
+        });
+
+        epicListenerCache.forEach(listener => {
+            listener.conditions.forEach(condition => {
+                if (!listener.hasError) {
+                    condition.value = condition._value;
+                }
+                delete condition._value;
+            });
+            delete listener.hasError;
+            delete listener.processed;
         });
 
         conditionCache.forEach(condition => {
@@ -221,10 +252,16 @@ export const anyOf = function (...conditions) {
 
 export const getEpicState = function(epicName) {
     if (epicRegistry[epicName]) {
-        return { ...epicRegistry[epicName].state };
+        return epicRegistry[epicName].state;
     }
 
-    return Object.keys(epicRegistry).reduce((a, c) => ({ ...a, [c]: { ...epicRegistry[c].state }}), {});
+    return (
+        Object.keys(epicRegistry)
+            .reduce((a, c) => {
+                a[c] = epicRegistry[c].state;
+                return a;
+            }, {})
+    );
 };
 
 export default {

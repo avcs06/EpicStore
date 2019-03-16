@@ -19,13 +19,7 @@
     "test": "jasmine",
     "debug": "node --inspect-brk node_modules/.bin/jasmine"
   },
-  "keywords": [
-    "autocomplete",
-    "suggest",
-    "textarea",
-    "contenteditable",
-    "dropdown"
-  ],
+  "keywords": [],
   "author": "AvcS",
   "license": "MIT",
   "devDependencies": {
