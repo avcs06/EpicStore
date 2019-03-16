@@ -47,6 +47,7 @@
     "rollup-watch": "^4.0.0"
   },
   "dependencies": {
+    "invariant": "^2.2.4",
     "memoizee": "^0.4.14"
   }
 }

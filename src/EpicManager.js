@@ -1,11 +1,13 @@
 import memoize from 'memoizee';
+import invariant from 'invariant';
+import Errors from './Errors';
 
 const epics = {};
 const updaters = {};
 const epicListeners = {};
 const initialConditionValue = Symbol('initialConditionValue');
 
-function processCondition(condition, index) {
+function processCondition(condition) {
     if (condition.constructor === Array) {
         return condition.map(processCondition);
     } else if (typeof condition === 'string') {
@@ -14,14 +16,10 @@ function processCondition(condition, index) {
         condition = { ...condition };
     }
 
-    if (!condition.type || typeof condition.type !== 'string') {
-        throw new Error('Missing required property: type. Condition[${index}]');
-    }
+    invariant(typeof condition.type === 'string', Errors.invalidConditionType);
 
     if (condition.selector) {
-        if (typeof condition.selector !== 'function') {
-            throw new Error('Invalid Type: condition.selector should be of type function');
-        }
+        invariant(typeof condition.selector === 'function', Errors.invalidConditionSelector);
         condition.selector = memoize(condition.selector, { max: 1 });
     } else {
         condition.selector = state => state;
@@ -45,29 +43,14 @@ function splitConditions([...conditions]) {
     return conditionsList.length ? conditionsList : [conditions];
 }
 
-function makeError(info, message) {
-    const parts = [];
-    obj.epic && parts.push(`Epic: ${obj.epic}`);
-    obj.updater && parts.push(`Updater: ${obj.updater}`);
-    obj.condition && parts.push(`Condition: ${obj.condition}`);
-    return parts.join(' > ') + ' :: ' + message;
-};
-
 export const register = function({ name, state = {}, scope = {}, updaters = [] }) {
-    const errorInfo = { epic: name };
-    if (epics[name]) {
-        throw new Error(makeError(errorInfo, 'Epic with same name is already registered'));
-    }
+    invariant(!epics[name], Errors.duplicateEpic);
 
     epics[name] = { state, scope };
     updaters.forEach(({ conditions, handler }, index) => {
-        errorInfo.updater = handler.name || index;
         conditions = conditions.map(processCondition);
         splitConditions(conditions).forEach(conditions => {
-            if (!conditions.find(({ passive }) => !passive)) {
-                const noPassiveUpdaters = ' Updater should have atleast one non passive condition.';
-                throw new Error(makeError(errorInfo, noPassiveUpdaters));
-            }
+            invariant(conditions.find(({ passive }) => !passive), Errors.noPassiveUpdaters);
 
             const updater = { epic: name, handler, conditions };
             conditions.forEach(({ type }) => {
@@ -124,9 +107,9 @@ export const dispatch = (() => {
                 epic._scope = epic._scope || epic.scope;
 
                 const { state, scope, actions } = handler(getHandlerParams(conditions), {
-                    state: epic._state, prevState: epic.state,
-                    scope: epic._scope, prevScope: epic.scope,
-                    sourceAction, currentAction: action,
+                    state: { ...epic._state }, prevState: { ...epic.state },
+                    scope: { ...epic._scope }, prevScope: { ...epic.scope },
+                    sourceAction: { ...sourceAction }, currentAction: { ...action },
                     dispatch: processAction
                 });
 
@@ -151,7 +134,7 @@ export const dispatch = (() => {
 
     return function (action) {
         if (inCycle) return processAction(action, true);
-        if (afterCycle) throw new Error('Epic listeners should not dispatch new Actions');
+        invariant(afterCycle, Errors.noDispatchInEpicListener);
 
         // Fresh dispatch cycle
         inCycle = true;
@@ -174,7 +157,7 @@ export const dispatch = (() => {
                 listeners.forEach(({ conditions, handler }) => {
                     if (conditions.some(condition => {
                         condition.value !== condition.selector(actionCache[condition.type])
-                    })) handler(getHandlerParams(conditions), { sourceAction });
+                    })) handler(getHandlerParams(conditions), { sourceAction: { ...sourceAction } });
                 });
             }
 
