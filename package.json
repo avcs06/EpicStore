@@ -16,7 +16,7 @@
     "build:umd:watch": "npm run build:umd -- --watch",
     "build:umd:min": "cross-env BABEL_ENV=es NODE_ENV=production rollup src/EpicManager.js --config --output dist/EpicManager.min.js",
     "prepublish": "npm run build",
-    "test": "jasmine",
+    "test": "babel-node ./node_modules/istanbul/lib/cli cover jasmine",
     "debug": "node --inspect-brk node_modules/.bin/jasmine"
   },
   "keywords": [],
@@ -30,6 +30,7 @@
     "babel-preset-env": "^1.5.2",
     "cross-env": "^5.0.1",
     "eslint": "^4.1.1",
+    "istanbul": "^1.0.0-alpha",
     "jasmine": "^3.3.1",
     "jasmine-es6": "^0.4.3",
     "rimraf": "^2.6.1",

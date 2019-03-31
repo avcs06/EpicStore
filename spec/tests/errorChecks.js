@@ -16,7 +16,7 @@ describe("Invalid Entries: should throw error", function() {
     }).toThrow(invariantError(Errors.duplicateEpic));
   });
 
-  it("if no active listeners are passed", function () {
+  it("if no active listeners are passed", function() {
     expect(() => {
       EpicManager.register({
         name: 'INVALID_EPIC_2',
@@ -30,7 +30,7 @@ describe("Invalid Entries: should throw error", function() {
     }).toThrow(invariantError(Errors.noPassiveUpdaters));
   });
 
-  it("on invalid conditions", function () {
+  it("on invalid conditions", function() {
     expect(() => {
       EpicManager.register({
         name: 'INVALID_EPIC_3',
@@ -54,8 +54,7 @@ describe("Invalid Entries: should throw error", function() {
     }).toThrow(invariantError(Errors.invalidConditionSelector));
   });
 
-  it("on dispatching inside epic listener", function () {
-    debugger;
+  it("on dispatching inside epic listener", function() {
     EpicManager.register({
       name: 'INVALID_EPIC_5',
       state: { counter: 1 },
@@ -68,21 +67,12 @@ describe("Invalid Entries: should throw error", function() {
       ]
     });
 
-    EpicManager.addListener(['INVALID_EPIC_5'], ([ { counter } ]) => {
+    EpicManager.addListener(['INVALID_EPIC_5'], ([{ counter }]) => {
       EpicManager.dispatch({ type: 'INVALID_ACTION_1' });
     });
 
     expect(() => {
       EpicManager.dispatch({ type: 'INVALID_ACTION_4' });
     }).toThrow([invariantError(Errors.noDispatchInEpicListener)]);
-  });
-
-  it("on invalid epics", function() {
-    expect(() => {
-      EpicManager.register({ name: 'INVALID_EPIC_6', state: null });
-    }).toThrow(invariantError(Errors.invalidEpicState));
-    expect(() => {
-      EpicManager.register({ name: 'INVALID_EPIC_7', scope: null });
-    }).toThrow(invariantError(Errors.invalidEpicScope));
   });
 });

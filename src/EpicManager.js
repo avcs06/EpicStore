@@ -1,12 +1,11 @@
 import memoize from 'memoizee';
 import invariant from 'invariant';
 import Errors from './Errors';
-import { freeze, unfreeze } from './Utilities';
+import { initialValue, freeze, unfreeze } from './Frozen';
 
 const epicRegistry = {};
 const updaterRegistry = {};
 const epicListeners = {};
-const initialConditionValue = Symbol('initialConditionValue');
 
 function processCondition(condition) {
     if (condition.constructor === Array) {
@@ -26,7 +25,7 @@ function processCondition(condition) {
         condition.selector = state => state;
     }
 
-    condition.value = condition.value || initialConditionValue;
+    condition.value = condition.value || initialValue;
     return condition;
 }
 
@@ -44,27 +43,30 @@ function splitConditions([...conditions]) {
     return conditionsList.length ? conditionsList : [conditions];
 }
 
-export const register = function({ name, state = {}, scope = {}, updaters = [] }) {
+const register = function({ name, state = initialValue, scope = initialValue, updaters = [] }) {
     invariant(!epicRegistry[name], Errors.duplicateEpic);
-    invariant(state !== null && typeof state === 'object', Errors.invalidEpicState);
-    invariant(scope !== null && typeof scope === 'object', Errors.invalidEpicScope);
 
-    epicRegistry[name] = { state: freeze(state), scope: freeze(scope) };
-    updaters.forEach(({ conditions, handler }, index) => {
-        conditions = conditions.map(processCondition);
-        splitConditions(conditions).forEach(conditions => {
-            invariant(conditions.find(({ passive }) => !passive), Errors.noPassiveUpdaters);
+    epicRegistry[name] = {
+        state: freeze(state),
+        scope: freeze(scope),
+        updaters: updaters.map(({ conditions, handler }, index) => {
+            conditions = conditions.map(processCondition);
+            return splitConditions(conditions).map(conditions => {
+                invariant(conditions.find(({ passive }) => !passive), Errors.noPassiveUpdaters);
 
-            const updater = { epic: name, handler, conditions };
-            conditions.forEach(({ type }) => {
-                if (!updaterRegistry[type]) updaterRegistry[type] = [];
-                updaterRegistry[type].push(updater);
+                const updater = { epic: name, handler, conditions };
+                conditions.forEach(({ type }) => {
+                    if (!updaterRegistry[type]) updaterRegistry[type] = [];
+                    updaterRegistry[type].push(updater);
+                });
+
+                return updater;
             });
-        });
-    });
+        })
+    };
 };
 
-export const unregister = function(epic) {
+const unregister = function(epic) {
     const epicName = epic.name || epic;
     if (epicRegistry[epicName]) {
         delete epicRegistry[epicName];
@@ -77,12 +79,13 @@ export const unregister = function(epic) {
 const getSelectorValue = ({ selector }, { type, payload }) => selector(payload, type);
 const didConditionChange = condition => condition.hasOwnProperty('_value') && (condition._value !== condition.value);
 
-export const dispatch = (() => {
+const dispatch = (() => {
     let sourceAction, actionCache, conditionCache, inCycle, afterCycle, epicListenerCache;
 
-    const getHandlerParams = conditions => conditions.map(condition => (
-        condition.hasOwnProperty('_value') ? condition._value : condition.value
-    ));
+    const getHandlerParams = conditions => conditions.map(condition => {
+        const value = condition.hasOwnProperty('_value') ? condition._value : condition.value;
+        return value === initialValue ? undefined : value;
+    });
 
     const processAction = (action, external) => {
         actionCache[action.type] = action.payload;
@@ -100,7 +103,7 @@ export const dispatch = (() => {
             if (!conditions.every(condition => (
                 condition === activeCondition ||
                 (condition.optional || condition.passive) &&
-                condition.value !== initialConditionValue ||
+                condition.value !== initialValue ||
                 didConditionChange(condition)
             ))) return;
 
@@ -115,12 +118,12 @@ export const dispatch = (() => {
             });
 
             if (scope) {
-                epic._scope = freeze({ ...unfreeze(epic._scope), ...scope });
+                epic._scope = freeze(unfreeze(epic._scope, scope));
             }
 
             if (state) {
-                epic._state = freeze({ ...unfreeze(epic._state), ...state });
-                processAction(freeze({ type: epicName, payload: epic._state }));
+                epic._state = freeze(unfreeze(epic._state, state));
+                processAction({ type: epicName, payload: epic._state });
             }
 
             if (actions) {
@@ -168,7 +171,10 @@ export const dispatch = (() => {
                     const { conditions, handler } = listener;
                     conditions.forEach(condition => {
                         if (actionCache[condition.type]) {
-                            condition._value = getSelectorValue(condition, actionCache[condition.type]);
+                            condition._value = getSelectorValue(condition, {
+                                type: condition.type,
+                                payload: actionCache[condition.type]
+                            });
                             if (!hasChange && condition._value !== condition.value) {
                                 hasChange = true;
                             }
@@ -229,7 +235,7 @@ export const dispatch = (() => {
     };
 })();
 
-export const addListener = function (conditions, handler) {
+const addListener = function (conditions, handler) {
     conditions = conditions.map(processCondition);
     const epicListener = { conditions, handler };
 
@@ -246,21 +252,33 @@ export const addListener = function (conditions, handler) {
     };
 };
 
-export const anyOf = function (...conditions) {
+const anyOf = function (...conditions) {
     return conditions;
 };
 
-export const getEpicState = function(epicName) {
-    if (epicRegistry[epicName]) {
-        return epicRegistry[epicName].state;
-    }
+const getEpic = function(epicName, key) {
+    const epic = epicRegistry[epicName];
+    return epic ? key ? epic[key] : epic : null;
+};
+
+const getEpicState = function(epicName) {
+    return getEpic(epicName, 'state');
+};
+
+const getEpicScope = function(epicName) {
+    return getEpic(epicName, 'scope');
+};
+
+const getEpicUpdaters = function (epicName, index = null) {
+    let updaters = getEpic(epicName, 'updaters');
+    updaters = (updaters || []).map(updater => updater.map(({ conditions, handler }) => ({
+        handler, conditions: conditions.map(condition => ({ ...condition }))
+    })));
 
     return (
-        Object.keys(epicRegistry)
-            .reduce((a, c) => {
-                a[c] = epicRegistry[c].state;
-                return a;
-            }, {})
+        index === null ?
+            updaters :
+            updaters[index] && updaters[index].length === 1 ? updaters[index][0] : updaters[index]
     );
 };
 
@@ -270,5 +288,7 @@ export default {
     dispatch,
     addListener,
     anyOf,
-    getEpicState
+    getEpicState,
+    getEpicScope,
+    getEpicUpdaters,
 };
