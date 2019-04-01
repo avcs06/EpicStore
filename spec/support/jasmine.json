@@ -4,8 +4,7 @@
     "**/*.js"
   ],
   "helpers": [
-    "../node_modules/jasmine-es6/lib/install.js",
-    "helpers/SpecHelpers.js"
+    "../node_modules/jasmine-es6/lib/install.js"
   ],
   "stopSpecOnExpectationFailure": false,
   "random": true

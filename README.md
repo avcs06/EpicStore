@@ -53,7 +53,7 @@ Updaters listen to conditions which gives more functionalities than actions.
 * An updater should have at least one non passive condition.
 * **optional:** Optional condition does execute the handler when it's respective action is dispatched, but it is not necessary for this condition to be met to execute the handler.
 * It is possible for multiple optional conditions to be met inside same epic cycle and handler will receive ***ALL*** the condition values.
-* Passive and Optional conditions will not be fulfilled until they have a value, i.e they should have an initial value or their respective actions should have been dispatched atleast once.
+* Passive and Optional conditions will be fulfilled with null if they don't have a value, i.e they don't have an initial value and their respective actions were not dispatched atleast once.
 * **selector:** A function to select the part or whole of payload that is needed by this condition.
 * A condition is fulfilled if the value returned by selector is different from its prev value. If a new action has been dispatched but the part of the payload that the condition depends on is not changed then the condition will not be fulfilled.
 * ***Selector functions SHOULD BE pure functions*** (number of executions is not gauranteed to one per cycle).

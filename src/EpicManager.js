@@ -102,8 +102,7 @@ const dispatch = (() => {
 
             if (!conditions.every(condition => (
                 condition === activeCondition ||
-                (condition.optional || condition.passive) &&
-                condition.value !== initialValue ||
+                condition.optional || condition.passive ||
                 didConditionChange(condition)
             ))) return;
 
