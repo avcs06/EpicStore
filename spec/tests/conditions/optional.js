@@ -1,66 +1,74 @@
 import EpicManager from '../../../src/EpicManager';
 import { makeGetter, makeCounterEpic } from '../../helpers/makeEpic';
 
-const makeOptional = makeGetter('optional');
-const makeOptionalEpic = makeOptional('epic');
-const makeOptionalAction = makeOptional('action');
+const make = makeGetter('optional');
+const makeEpic = make('epic');
+const makeAction = make('action');
 
 describe("Optional condition: ", function() {
     it("Should trigger handler if optional condition not met", function() {
-        const activeEpic = makeOptionalEpic();
-        const activeAction = makeOptionalAction();
-        makeCounterEpic(activeEpic, activeAction, {
-            extraConditions: [{ type: makeOptionalAction(), optional: true }]
-        });
+        const epic = makeEpic();
+        const activeAction = makeAction();
+        EpicManager.register(makeCounterEpic(epic, activeAction, {
+            extraConditions: [{ type: makeAction(), optional: true }]
+        }));
 
         EpicManager.dispatch(activeAction);
-        expect(EpicManager.getEpicState(activeEpic).counter).toBe(1);
+        expect(EpicManager.getEpicState(epic).counter).toBe(1);
     });
 
     it("Should not trigger handler with active conditions if only optional condition met", function() {
-        makeCounterEpic('OPTIONAL_EPIC_2', 'OPTIONAL_ACTION_3', {
-            extraConditions: [{ type: 'OPTIONAL_ACTION_4', optional: true }]
-        });
+        const epic = makeEpic();
+        const optionalAction = makeAction();
+        EpicManager.register(makeCounterEpic(epic, makeAction(), {
+            extraConditions: [{ type: optionalAction, optional: true }]
+        }));
 
-        EpicManager.dispatch('OPTIONAL_ACTION_4');
-        expect(EpicManager.getEpicState('OPTIONAL_EPIC_2').counter).toBe(0);
+        EpicManager.dispatch(optionalAction);
+        expect(EpicManager.getEpicState(epic).counter).toBe(0);
     });
 
     it("Should trigger handler with no active conditions if only optional condition met", function() {
-        const activeEpic = makeOptionalEpic();
-        const optionalAction1 = makeOptionalAction();
-        makeCounterEpic(activeEpic, null, {
+        const epic = makeEpic();
+        const optionalAction = makeAction();
+        EpicManager.register(makeCounterEpic(epic, null, {
             extraConditions: [
-                { type: optionalAction1, optional: true },
-                { type: makeOptionalAction(), optional: true },
-                { type: makeOptionalAction(), passive: true },
+                { type: optionalAction, optional: true },
+                { type: makeAction(), optional: true },
+                { type: makeAction(), passive: true },
             ]
-        });
+        }));
 
-        EpicManager.dispatch(optionalAction1);
-        expect(EpicManager.getEpicState(activeEpic).counter).toBe(1);
+        EpicManager.dispatch(optionalAction);
+        expect(EpicManager.getEpicState(epic).counter).toBe(1);
     });
 
-    it("Should trigger handler once if optional condition met before active condition", function() {
-        makeCounterEpic('OPTIONAL_EPIC_5', 'OPTIONAL_ACTION_6');
-        makeCounterEpic('OPTIONAL_EPIC_6', 'OPTIONAL_ACTION_6', {
-            extraConditions: [{ type: 'OPTIONAL_EPIC_5', optional: true }]
-        });
+    it("Should trigger handler only once if optional condition met before active condition", function () {
+        const epic1 = makeEpic();
+        const epic2 = makeEpic();
+        const action = makeAction();
+        EpicManager.register(makeCounterEpic(epic1, action));
+        EpicManager.register(makeCounterEpic(epic2, action, {
+            extraConditions: [{ type: epic1, optional: true }]
+        }));
 
-        EpicManager.dispatch('OPTIONAL_ACTION_6');
-        expect(EpicManager.getEpicState('OPTIONAL_EPIC_5').counter).toBe(1);
-        expect(EpicManager.getEpicState('OPTIONAL_EPIC_6').counter).toBe(1);
+        EpicManager.dispatch(action);
+        expect(EpicManager.getEpicState(epic1).counter).toBe(1);
+        expect(EpicManager.getEpicState(epic2).counter).toBe(1);
     });
 
-    // TODO: Known issue will execute OPTIONAL_EPIC_3 twice
+    // TODO: Known issue will execute epic1 twice
     it("Should trigger handler twice if optional condition met after active condition", function() {
-        makeCounterEpic('OPTIONAL_EPIC_3', 'OPTIONAL_ACTION_5', {
-            extraConditions: [{ type: 'OPTIONAL_EPIC_4', optional: true }]
-        });
-        makeCounterEpic('OPTIONAL_EPIC_4', 'OPTIONAL_ACTION_5');
+        const epic1 = makeEpic();
+        const epic2 = makeEpic();
+        const action = makeAction();
+        EpicManager.register(makeCounterEpic(epic1, action, {
+            extraConditions: [{ type: epic2, optional: true }]
+        }));
+        EpicManager.register(makeCounterEpic(epic2, action));
 
-        EpicManager.dispatch('OPTIONAL_ACTION_5');
-        expect(EpicManager.getEpicState('OPTIONAL_EPIC_3').counter).toBe(2);
-        expect(EpicManager.getEpicState('OPTIONAL_EPIC_4').counter).toBe(1);
+        EpicManager.dispatch(action);
+        expect(EpicManager.getEpicState(epic1).counter).toBe(2);
+        expect(EpicManager.getEpicState(epic2).counter).toBe(1);
     });
 });

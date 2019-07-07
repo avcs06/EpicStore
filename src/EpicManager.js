@@ -25,19 +25,24 @@ function processCondition(condition) {
         condition.selector = state => state;
     }
 
-    condition.value = condition.value || initialValue;
+    if (!condition.hasOwnProperty('value')) {
+        condition.value = initialValue;
+    }
+
     return condition;
 }
 
 function splitConditions([...conditions]) {
     const conditionsList = [];
-    conditions.forEach((condition, i) => {
+    conditions.some((condition, i) => {
         if (condition.constructor === Array) {
             condition.forEach(c => {
                 conditions[i] = c;
                 conditionsList.push(...splitConditions(conditions))
             });
+            return true;
         }
+        return false;
     });
 
     return conditionsList.length ? conditionsList : [conditions];
@@ -238,15 +243,14 @@ const addListener = function (conditions, handler) {
     conditions = conditions.map(processCondition);
     const epicListener = { conditions, handler };
 
-    conditions.forEach(({ type }) => {
+    const indices = conditions.map(({ type }) => {
         if (!epicListeners[type]) epicListeners[type] = [];
-        epicListeners[type].push(epicListener);
+        return epicListeners[type].push(epicListener) - 1;
     });
 
     return function removeListener() {
-        conditions.forEach(({ type }) => {
-            epicListeners[type] =
-                epicListeners[type].filter(listener =>  listener !== epicListener);
+        conditions.forEach(({ type }, index) => {
+            epicListeners[type].splice(indices[index], 1);
         });
     };
 };
@@ -257,7 +261,7 @@ const anyOf = function (...conditions) {
 
 const getEpic = function(epicName, key) {
     const epic = epicRegistry[epicName];
-    return epic ? key ? epic[key] : epic : null;
+    return epic ? epic[key] : null;
 };
 
 const getEpicState = function(epicName) {
@@ -268,17 +272,13 @@ const getEpicScope = function(epicName) {
     return getEpic(epicName, 'scope');
 };
 
-const getEpicUpdaters = function (epicName, index = null) {
+const getEpicUpdaters = function (epicName, index) {
     let updaters = getEpic(epicName, 'updaters');
-    updaters = (updaters || []).map(updater => updater.map(({ conditions, handler }) => ({
-        handler, conditions: conditions.map(condition => ({ ...condition }))
-    })));
+    updaters = updaters[index].map(({ conditions }) => ({
+        conditions: conditions.map(condition => ({ ...condition }))
+    }));
 
-    return (
-        index === null ?
-            updaters :
-            updaters[index] && updaters[index].length === 1 ? updaters[index][0] : updaters[index]
-    );
+    return updaters.length === 1 ? updaters[0] : updaters;
 };
 
 export default {

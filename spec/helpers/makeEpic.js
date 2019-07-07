@@ -1,4 +1,5 @@
-import EpicManager from '../../src/EpicManager';
+import Epic from '../../src/Epic';
+import Action from '../../src/Action';
 import Updater from '../../src/Updater';
 
 export const makeGetter = (() => {
@@ -15,27 +16,24 @@ export const makeCounterEpic = (epic, action, additionalParams = {}) => {
         verify = Function.prototype
     } = additionalParams;
 
-    EpicManager.register({
-        name: epic,
-        scope: { counter: 0 },
-        state: { counter: 0 },
-        updaters: [
-            new Updater([
-                ...(action ? [{ type: action }] : []),
-                ...extraConditions
-            ], (conditions, { state, scope, currentAction }) => {
-                if (additionalParams.withError) {
-                    throw new Error('Fake Error');
-                }
+    return new Epic(epic, { counter: 0 }, { counter: 0 }, [
+        new Updater([
+            ...(action ?
+                    action.constructor === Array ?
+                        action : [action.type ? action : new Action(action)] : []),
+            ...extraConditions
+        ], (conditions, { state, scope, currentAction }) => {
+            if (additionalParams.withError) {
+                throw new Error('Fake Error');
+            }
 
-                verify(conditions, { state, scope, currentAction });
+            verify(conditions, { state, scope, currentAction });
 
-                return {
-                    state: stateChange(state, conditions),
-                    scope: scopeChange(scope, conditions),
-                    actions: actionsToDispatch
-                };
-            })
-        ]
-    });
+            return {
+                state: stateChange(state, conditions),
+                scope: scopeChange(scope, conditions),
+                actions: actionsToDispatch
+            };
+        })
+    ]);
 };
