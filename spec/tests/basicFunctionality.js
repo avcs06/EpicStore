@@ -57,18 +57,18 @@ describe("Basic functionalities", function() {
         EpicManager.dispatch(action);
         expect(EpicManager.getEpicState(epic1).counter).toBe(1);
         expect(EpicManager.getEpicScope(epic1).counter).toBe(1);
-        expect(EpicManager.getEpicUpdaters(epic2, 0).conditions[0].value.counter).toBe(1);
+        expect(EpicManager.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(1);
 
         additionalParams.withError = true;
         expect(() => EpicManager.dispatch(action)).toThrow();
         expect(EpicManager.getEpicState(epic1).counter).toBe(1);
         expect(EpicManager.getEpicScope(epic1).counter).toBe(1);
-        expect(EpicManager.getEpicUpdaters(epic2, 0).conditions[0].value.counter).toBe(1);
+        expect(EpicManager.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(1);
 
         additionalParams.withError = false;
         EpicManager.dispatch(action);
         expect(EpicManager.getEpicState(epic1).counter).toBe(2);
         expect(EpicManager.getEpicScope(epic1).counter).toBe(2);
-        expect(EpicManager.getEpicUpdaters(epic2, 0).conditions[0].value.counter).toBe(2);
+        expect(EpicManager.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(2);
     });
 });

@@ -112,26 +112,26 @@ const dispatch = (() => {
             ))) return;
 
             const epic = epicRegistry[epicName];
-            epic._state = epic._state || epic.state;
-            epic._scope = epic._scope || epic.scope;
+            epic._state = epic.hasOwnProperty('_state') ? epic._state : epic.state;
+            epic._scope = epic.hasOwnProperty('_scope') ? epic._scope : epic.scope;
 
-            const { state, scope, actions } = handler(getHandlerParams(conditions), {
+            const handlerUpdate = handler(getHandlerParams(conditions), {
                 state: epic._state, prevState: epic.state,
                 scope: epic._scope, prevScope: epic.scope,
                 sourceAction, currentAction: action
             });
 
-            if (scope) {
-                epic._scope = freeze(unfreeze(epic._scope, scope));
+            if (handlerUpdate.hasOwnProperty('scope')) {
+                epic._scope = freeze(unfreeze(epic._scope, handlerUpdate.scope));
             }
 
-            if (state) {
-                epic._state = freeze(unfreeze(epic._state, state));
+            if (handlerUpdate.hasOwnProperty('state')) {
+                epic._state = freeze(unfreeze(epic._state, handlerUpdate.state));
                 processAction({ type: epicName, payload: epic._state });
             }
 
-            if (actions) {
-                actions.forEach(action => processAction(freeze(action)));
+            if (handlerUpdate.hasOwnProperty('actions')) {
+                handlerUpdate.actions.forEach(action => processAction(freeze(action)));
             }
         });
     };
@@ -273,12 +273,9 @@ const getEpicScope = function(epicName) {
 };
 
 const getEpicUpdaters = function (epicName, index) {
-    let updaters = getEpic(epicName, 'updaters');
-    updaters = updaters[index].map(({ conditions }) => ({
+    return getEpic(epicName, 'updaters')[index].map(({ conditions }) => ({
         conditions: conditions.map(condition => ({ ...condition }))
     }));
-
-    return updaters.length === 1 ? updaters[0] : updaters;
 };
 
 export default {
