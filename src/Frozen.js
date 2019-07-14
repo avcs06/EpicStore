@@ -25,14 +25,16 @@ export const unfreeze = (_object, object, ignore = false) => {
     if (_object !== initialValue) {
         const _isObject = isObject(_object);
         if (isObject(object) === _isObject) {
+            if (!_isObject) { return newObject; }
+
             const _isArray = isArray(_object);
             if (isArray(object) === _isArray) {
-                const newObject = isArray ? [] : {};
+                newObject = _isArray ? [] : {};
                 const _props = Object.getOwnPropertyNames(_object);
                 const props = Object.getOwnPropertyNames(object);
 
                 [..._props, ...props].forEach(function(prop) {
-                    if (newObject.hasOwnProperty(prop) || isArray && prop === 'length') return;
+                    if (newObject.hasOwnProperty(prop) || _isArray && prop === 'length') return;
 
                     const _entry = _object[prop], entry = object[prop];
                     if (_object.hasOwnProperty(prop)) {

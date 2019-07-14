@@ -87,6 +87,11 @@ const didConditionChange = condition => condition.hasOwnProperty('_value') && (c
 const dispatch = (() => {
     let sourceAction, actionCache, conditionCache, inCycle, afterCycle, epicListenerCache;
 
+    const validateAction = action => {
+        if (typeof action === 'string') action = { type: action };
+        return freeze(action);
+    };
+
     const getHandlerParams = conditions => conditions.map(condition => {
         const value = condition.hasOwnProperty('_value') ? condition._value : condition.value;
         return value === initialValue ? undefined : value;
@@ -99,12 +104,18 @@ const dispatch = (() => {
             activeCondition._value = getSelectorValue(activeCondition, action);
             conditionCache.push(activeCondition);
 
+            // If this is not external action and condition value didnt change, dont update the epic
             if (!external && !didConditionChange(activeCondition)) return;
 
+            // If this is passive action
+            // there should be atleast one non passive condition whose value changed
+            // if not dont update the epic
             if (activeCondition.passive && !conditions.some(condition => (
                 !condition.passive && didConditionChange(condition)
             ))) return;
 
+            // if all active conditions are not changed, dont update the epic
+            // PS: activeCondition doesnt need to change if it is external
             if (!conditions.every(condition => (
                 condition === activeCondition ||
                 condition.optional || condition.passive ||
@@ -131,18 +142,18 @@ const dispatch = (() => {
             }
 
             if (handlerUpdate.hasOwnProperty('actions')) {
-                handlerUpdate.actions.forEach(action => processAction(freeze(action)));
+                handlerUpdate.actions.forEach(action => processAction(validateAction(action), true));
             }
         });
     };
 
     return function (action) {
         // validate action
-        if (typeof action === 'string') action = { type: action };
-        action = freeze(action);
+        action = validateAction(action);
 
         // Handle external actions during cycle
         if (inCycle) return processAction(action, true);
+        // No actions should be dispatched from epic listeners
         invariant(!afterCycle, Errors.noDispatchInEpicListener);
 
         // Fresh dispatch cycle
@@ -171,7 +182,6 @@ const dispatch = (() => {
                 listeners.forEach(listener => {
                     if (listener.processed) return;
 
-                    let hasChange = false;
                     const { conditions, handler } = listener;
                     conditions.forEach(condition => {
                         if (actionCache[condition.type]) {
@@ -179,13 +189,19 @@ const dispatch = (() => {
                                 type: condition.type,
                                 payload: actionCache[condition.type]
                             });
-                            if (!hasChange && condition._value !== condition.value) {
-                                hasChange = true;
-                            }
                         }
                     });
 
-                    if (hasChange) {
+                    // If all conditions are optional or passive
+                    // then atleast one optional condition should change
+                    // Else all active conditions should change
+                    if (
+                        conditions.every(({ optional, passive }) => (optional || passive)) ?
+                            conditions.some(condition => condition.optional && didConditionChange(condition)) :
+                            conditions.every(condition => (
+                                condition.optional || condition.passive || didConditionChange(condition)
+                            ))
+                    ) {
                         try {
                             listener.processed = true;
                             handler(getHandlerParams(conditions), { sourceAction });

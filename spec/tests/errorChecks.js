@@ -1,7 +1,12 @@
 import EpicManager from '../../src/EpicManager';
 import Updater from '../../src/Updater';
 import Errors from '../../src/Errors';
+import Epic from '../../src/Epic';
+import { makeGetter } from '../helpers/makeEpic';
 
+const make = makeGetter('errorchecks');
+const makeEpic = make('epic');
+const makeAction = make('action');
 const invariantError = message => {
   const error = new Error(message);
   error.name = 'Invariant Violation';
@@ -74,5 +79,35 @@ describe("Invalid Entries: should throw error", function() {
     expect(() => {
       EpicManager.dispatch({ type: 'INVALID_ACTION_4' });
     }).toThrow([invariantError(Errors.noDispatchInEpicListener)]);
+  });
+
+  it("on changing state type from array to object", function () {
+    const epic = makeEpic();
+    const action = makeAction();
+    EpicManager.register(new Epic(epic, [1, 2, 3], null, [
+      new Updater([action], function ($0, { state }) {
+        return {
+          state: { a: 2 }
+        }
+      })
+    ]));
+    expect(() => {
+      EpicManager.dispatch(action);
+    }).toThrow(invariantError(Errors.invalidHandlerUpdate));
+  });
+
+  it("on changing state type from primitive to object", function () {
+    const epic = makeEpic();
+    const action = makeAction();
+    EpicManager.register(new Epic(epic, 1, null, [
+      new Updater([action], function ($0, { state }) {
+        return {
+          state: { a: 2 }
+        }
+      })
+    ]));
+    expect(() => {
+      EpicManager.dispatch(action);
+    }).toThrow(invariantError(Errors.invalidHandlerUpdate));
   });
 });
