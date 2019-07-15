@@ -1,25 +1,29 @@
 import memoize from 'memoizee';
 import invariant from 'invariant';
-import Errors from './Errors';
+import { error, makeError } from './Errors';
 import { initialValue, freeze, unfreeze } from './Frozen';
 
 const epicRegistry = {};
 const updaterRegistry = {};
 const epicListeners = {};
 
-function processCondition(condition) {
+function processCondition(currentError, condition, index) {
     if (condition.constructor === Array) {
-        return condition.map(processCondition);
+        return condition.map(processCondition.bind(null, currentError));
     } else if (typeof condition === 'string') {
         condition = { type: condition };
     } else {
         condition = { ...condition };
     }
 
-    invariant(typeof condition.type === 'string', Errors.invalidConditionType);
+    const indexError = currentError(index);
+    invariant(typeof condition.type === 'string', indexError('invalidConditionType'));
+
+    const typeError = currentError(condition.type);
+    invariant(!condition.passive || !condition.optional, typeError('invalidConditionOP'));
 
     if (condition.selector) {
-        invariant(typeof condition.selector === 'function', Errors.invalidConditionSelector);
+        invariant(typeof condition.selector === 'function', typeError('invalidConditionSelector'));
         condition.selector = memoize(condition.selector, { max: 1 });
     } else {
         condition.selector = state => state;
@@ -49,17 +53,19 @@ function splitConditions([...conditions]) {
 }
 
 const register = function({ name, state = initialValue, scope = initialValue, updaters = [] }) {
-    invariant(!epicRegistry[name], Errors.duplicateEpic);
+    let currentError = makeError(name);
+    invariant(!epicRegistry[name], error('duplicateEpic', name));
 
     epicRegistry[name] = {
         state: freeze(state),
         scope: freeze(scope),
         updaters: updaters.map(({ conditions, handler }, index) => {
-            conditions = conditions.map(processCondition);
+            currentError = currentError(index);
+            conditions = conditions.map(processCondition.bind(null, currentError));
             return splitConditions(conditions).map(conditions => {
-                invariant(conditions.find(({ passive }) => !passive), Errors.noPassiveUpdaters);
+                invariant(conditions.find(({ passive }) => !passive), currentError()('noPassiveUpdaters'));
 
-                const updater = { epic: name, handler, conditions };
+                const updater = { epic: name, handler, conditions, index };
                 conditions.forEach(({ type }) => {
                     if (!updaterRegistry[type]) updaterRegistry[type] = [];
                     updaterRegistry[type].push(updater);
@@ -98,8 +104,10 @@ const dispatch = (() => {
     });
 
     const processAction = (action, external) => {
+        invariant(!external || !epicRegistry[action.type], error('invalidEpicAction', action.type));
+        invariant(!external || !actionCache.hasOwnProperty(action.type), error('noRepeatedExternalAction', action.type));
         actionCache[action.type] = action.payload;
-        (updaterRegistry[action.type] || []).forEach(({ epic: epicName, conditions, handler }) => {
+        (updaterRegistry[action.type] || []).forEach(({ epic: epicName, conditions, handler, index }) => {
             const activeCondition = conditions.find(({ type }) => action.type === type);
             activeCondition._value = getSelectorValue(activeCondition, action);
             conditionCache.push(activeCondition);
@@ -133,11 +141,11 @@ const dispatch = (() => {
             });
 
             if (handlerUpdate.hasOwnProperty('scope')) {
-                epic._scope = freeze(unfreeze(epic._scope, handlerUpdate.scope));
+                epic._scope = freeze(unfreeze(epic._scope, handlerUpdate.scope, error('invalidHandlerUpdate', epicName, index)));
             }
 
             if (handlerUpdate.hasOwnProperty('state')) {
-                epic._state = freeze(unfreeze(epic._state, handlerUpdate.state));
+                epic._state = freeze(unfreeze(epic._state, handlerUpdate.state, error('invalidHandlerUpdate', epicName, index)));
                 processAction({ type: epicName, payload: epic._state });
             }
 
@@ -154,7 +162,7 @@ const dispatch = (() => {
         // Handle external actions during cycle
         if (inCycle) return processAction(action, true);
         // No actions should be dispatched from epic listeners
-        invariant(!afterCycle, Errors.noDispatchInEpicListener);
+        invariant(!afterCycle, error('noDispatchInEpicListener'));
 
         // Fresh dispatch cycle
         inCycle = true;
@@ -256,7 +264,7 @@ const dispatch = (() => {
 })();
 
 const addListener = function (conditions, handler) {
-    conditions = conditions.map(processCondition);
+    conditions = conditions.map(processCondition.bind(null, makeError()()));
     const epicListener = { conditions, handler };
 
     const indices = conditions.map(({ type }) => {

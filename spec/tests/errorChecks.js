@@ -1,8 +1,8 @@
 import EpicManager from '../../src/EpicManager';
 import Updater from '../../src/Updater';
-import Errors from '../../src/Errors';
+import { error } from '../../src/Errors';
 import Epic from '../../src/Epic';
-import { makeGetter } from '../helpers/makeEpic';
+import { makeGetter, makeCounterEpic } from '../helpers/makeEpic';
 
 const make = makeGetter('errorchecks');
 const makeEpic = make('epic');
@@ -18,7 +18,7 @@ describe("Invalid Entries: should throw error", function() {
     EpicManager.register({ name: 'INVALID_EPIC_1' });
     expect(() => {
       EpicManager.register({ name: 'INVALID_EPIC_1' });
-    }).toThrow(invariantError(Errors.duplicateEpic));
+    }).toThrow(invariantError(error('duplicateEpic', 'INVALID_EPIC_1')));
   });
 
   it("if no active listeners are passed", function() {
@@ -32,7 +32,7 @@ describe("Invalid Entries: should throw error", function() {
           ], Function.prototype)
         ]
       });
-    }).toThrow(invariantError(Errors.noPassiveUpdaters));
+    }).toThrow(invariantError(error('noPassiveUpdaters', 'INVALID_EPIC_2', 0)));
   });
 
   it("on invalid conditions", function() {
@@ -45,7 +45,7 @@ describe("Invalid Entries: should throw error", function() {
           ], Function.prototype)
         ]
       });
-    }).toThrow(invariantError(Errors.invalidConditionType));
+    }).toThrow(invariantError(error('invalidConditionType', 'INVALID_EPIC_3', 0, 0)));
 
     expect(() => {
       EpicManager.register({
@@ -56,7 +56,7 @@ describe("Invalid Entries: should throw error", function() {
           ], Function.prototype)
         ]
       });
-    }).toThrow(invariantError(Errors.invalidConditionSelector));
+    }).toThrow(invariantError(error('invalidConditionSelector', 'INVALID_EPIC_4', 0, 'INVALID_ACTION_3')));
   });
 
   it("on dispatching inside epic listener", function() {
@@ -78,7 +78,7 @@ describe("Invalid Entries: should throw error", function() {
 
     expect(() => {
       EpicManager.dispatch({ type: 'INVALID_ACTION_4' });
-    }).toThrow([invariantError(Errors.noDispatchInEpicListener)]);
+    }).toThrow([invariantError(error('noDispatchInEpicListener'))]);
   });
 
   it("on changing state type from array to object", function () {
@@ -86,14 +86,12 @@ describe("Invalid Entries: should throw error", function() {
     const action = makeAction();
     EpicManager.register(new Epic(epic, [1, 2, 3], null, [
       new Updater([action], function ($0, { state }) {
-        return {
-          state: { a: 2 }
-        }
+        return { state: { a: 2 } };
       })
     ]));
     expect(() => {
       EpicManager.dispatch(action);
-    }).toThrow(invariantError(Errors.invalidHandlerUpdate));
+    }).toThrow(invariantError(error('invalidHandlerUpdate', epic, 0)));
   });
 
   it("on changing state type from primitive to object", function () {
@@ -101,13 +99,41 @@ describe("Invalid Entries: should throw error", function() {
     const action = makeAction();
     EpicManager.register(new Epic(epic, 1, null, [
       new Updater([action], function ($0, { state }) {
-        return {
-          state: { a: 2 }
-        }
+        return { state: { a: 2 } };
       })
     ]));
     expect(() => {
       EpicManager.dispatch(action);
-    }).toThrow(invariantError(Errors.invalidHandlerUpdate));
+    }).toThrow(invariantError(error('invalidHandlerUpdate', epic, 0)));
+  });
+
+  it("on optional + passive condition", function () {
+    const epic = makeEpic();
+    const action = makeAction();
+    expect(() => {
+      EpicManager.register(makeCounterEpic(epic, { type: action, passive: true, optional: true }));
+    }).toThrow(invariantError(error('invalidConditionOP', epic, 0, action)));
+  });
+
+  it("on epic as external action", function () {
+    const epic1 = makeEpic();
+    const epic2 = makeEpic();
+    const action = makeAction();
+    EpicManager.register(makeCounterEpic(epic1, action));
+    EpicManager.register(makeCounterEpic(epic2, action));
+    expect(() => {
+      EpicManager.dispatch(epic1);
+    }).toThrow(invariantError(error('invalidEpicAction', epic1)));
+  });
+
+  it("on cyclic external action", function () {
+    const epic = makeEpic();
+    const action = makeAction();
+    EpicManager.register(makeCounterEpic(epic, action, {
+      actionsToDispatch: [action]
+    }));
+    expect(() => {
+      EpicManager.dispatch(action);
+    }).toThrow(invariantError(error('noRepeatedExternalAction', action)));
   });
 });

@@ -1,6 +1,5 @@
 
 import invariant from 'invariant';
-import Errors from './Errors';
 
 const isArray = entry => entry.constructor === Array;
 const isObject = entry => entry !== null && typeof entry === "object";
@@ -20,7 +19,7 @@ export const freeze = object => {
     return object;
 };
 
-export const unfreeze = (_object, object, ignore = false) => {
+export const unfreeze = (_object, object, error, ignore = false) => {
     let newObject = object;
     if (_object !== initialValue) {
         const _isObject = isObject(_object);
@@ -39,9 +38,9 @@ export const unfreeze = (_object, object, ignore = false) => {
                     const _entry = _object[prop], entry = object[prop];
                     if (_object.hasOwnProperty(prop)) {
                         if (object.hasOwnProperty(prop)) {
-                            newObject[prop] = unfreeze(_entry, entry, true);
+                            newObject[prop] = unfreeze(_entry, entry, error, true);
                         } else if (isObject(_entry)) {
-                            newObject[prop] = unfreeze(_entry, isArray(_entry) ? [] : {}, true);
+                            newObject[prop] = unfreeze(_entry, isArray(_entry) ? [] : {}, error, true);
                         } else {
                             newObject[prop] = _entry;
                         }
@@ -50,10 +49,10 @@ export const unfreeze = (_object, object, ignore = false) => {
                     }
                 });
             } else {
-                invariant(ignore, Errors.invalidHandlerUpdate);
+                invariant(ignore, error);
             }
         } else {
-            invariant(ignore, Errors.invalidHandlerUpdate);
+            invariant(ignore, error);
         }
     }
 
