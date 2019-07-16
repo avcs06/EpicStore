@@ -1,4 +1,4 @@
-import EpicManager from '../../src/EpicManager';
+import { createStore } from '../../src/EpicStore';
 import Updater from '../../src/Updater';
 import { error } from '../../src/Errors';
 import Epic from '../../src/Epic';
@@ -7,6 +7,8 @@ import { makeGetter, makeCounterEpic } from '../helpers/makeEpic';
 const make = makeGetter('errorchecks');
 const makeEpic = make('epic');
 const makeAction = make('action');
+const EpicStore = createStore(true);
+
 const invariantError = message => {
   const error = new Error(message);
   error.name = 'Invariant Violation';
@@ -15,15 +17,15 @@ const invariantError = message => {
 
 describe("Invalid Entries: should throw error", function() {
   it("on duplicate epic name", function() {
-    EpicManager.register({ name: 'INVALID_EPIC_1' });
+    EpicStore.register({ name: 'INVALID_EPIC_1' });
     expect(() => {
-      EpicManager.register({ name: 'INVALID_EPIC_1' });
+      EpicStore.register({ name: 'INVALID_EPIC_1' });
     }).toThrow(invariantError(error('duplicateEpic', 'INVALID_EPIC_1')));
   });
 
   it("if no active listeners are passed", function() {
     expect(() => {
-      EpicManager.register({
+      EpicStore.register({
         name: 'INVALID_EPIC_2',
         updaters: [
           new Updater([
@@ -37,7 +39,7 @@ describe("Invalid Entries: should throw error", function() {
 
   it("on invalid conditions", function() {
     expect(() => {
-      EpicManager.register({
+      EpicStore.register({
         name: 'INVALID_EPIC_3',
         updaters: [
           new Updater([
@@ -48,7 +50,7 @@ describe("Invalid Entries: should throw error", function() {
     }).toThrow(invariantError(error('invalidConditionType', 'INVALID_EPIC_3', 0, 0)));
 
     expect(() => {
-      EpicManager.register({
+      EpicStore.register({
         name: 'INVALID_EPIC_4',
         updaters: [
           new Updater([
@@ -60,7 +62,7 @@ describe("Invalid Entries: should throw error", function() {
   });
 
   it("on dispatching inside epic listener", function() {
-    EpicManager.register({
+    EpicStore.register({
       name: 'INVALID_EPIC_5',
       state: { counter: 1 },
       updaters: [
@@ -72,38 +74,38 @@ describe("Invalid Entries: should throw error", function() {
       ]
     });
 
-    EpicManager.addListener(['INVALID_EPIC_5'], ([{ counter }]) => {
-      EpicManager.dispatch({ type: 'INVALID_ACTION_1' });
+    EpicStore.addListener(['INVALID_EPIC_5'], ([{ counter }]) => {
+      EpicStore.dispatch({ type: 'INVALID_ACTION_1' });
     });
 
     expect(() => {
-      EpicManager.dispatch({ type: 'INVALID_ACTION_4' });
+      EpicStore.dispatch({ type: 'INVALID_ACTION_4' });
     }).toThrow([invariantError(error('noDispatchInEpicListener'))]);
   });
 
   it("on changing state type from array to object", function () {
     const epic = makeEpic();
     const action = makeAction();
-    EpicManager.register(new Epic(epic, [1, 2, 3], null, [
+    EpicStore.register(new Epic(epic, [1, 2, 3], null, [
       new Updater([action], function ($0, { state }) {
         return { state: { a: 2 } };
       })
     ]));
     expect(() => {
-      EpicManager.dispatch(action);
+      EpicStore.dispatch(action);
     }).toThrow(invariantError(error('invalidHandlerUpdate', epic, 0)));
   });
 
   it("on changing state type from primitive to object", function () {
     const epic = makeEpic();
     const action = makeAction();
-    EpicManager.register(new Epic(epic, 1, null, [
+    EpicStore.register(new Epic(epic, 1, null, [
       new Updater([action], function ($0, { state }) {
         return { state: { a: 2 } };
       })
     ]));
     expect(() => {
-      EpicManager.dispatch(action);
+      EpicStore.dispatch(action);
     }).toThrow(invariantError(error('invalidHandlerUpdate', epic, 0)));
   });
 
@@ -111,7 +113,7 @@ describe("Invalid Entries: should throw error", function() {
     const epic = makeEpic();
     const action = makeAction();
     expect(() => {
-      EpicManager.register(makeCounterEpic(epic, { type: action, passive: true, optional: true }));
+      EpicStore.register(makeCounterEpic(epic, { type: action, passive: true, optional: true }));
     }).toThrow(invariantError(error('invalidConditionOP', epic, 0, action)));
   });
 
@@ -119,21 +121,21 @@ describe("Invalid Entries: should throw error", function() {
     const epic1 = makeEpic();
     const epic2 = makeEpic();
     const action = makeAction();
-    EpicManager.register(makeCounterEpic(epic1, action));
-    EpicManager.register(makeCounterEpic(epic2, action));
+    EpicStore.register(makeCounterEpic(epic1, action));
+    EpicStore.register(makeCounterEpic(epic2, action));
     expect(() => {
-      EpicManager.dispatch(epic1);
+      EpicStore.dispatch(epic1);
     }).toThrow(invariantError(error('invalidEpicAction', epic1)));
   });
 
   it("on cyclic external action", function () {
     const epic = makeEpic();
     const action = makeAction();
-    EpicManager.register(makeCounterEpic(epic, action, {
+    EpicStore.register(makeCounterEpic(epic, action, {
       actionsToDispatch: [action]
     }));
     expect(() => {
-      EpicManager.dispatch(action);
+      EpicStore.dispatch(action);
     }).toThrow(invariantError(error('noRepeatedExternalAction', action)));
   });
 });

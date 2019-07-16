@@ -1,46 +1,48 @@
-import EpicManager from '../../../src/EpicManager';
+import { createStore } from '../../../src/EpicStore';
 import { makeGetter, makeCounterEpic } from '../../helpers/makeEpic';
+import { anyOf, passive, optional } from '../../../src/Condition';
 
 const make = makeGetter('anyof');
 const makeEpic = make('epic');
 const makeAction = make('action');
+const EpicStore = createStore(true);
 
 describe("AnyOf conditions: ", function() {
     it("Should receive two values only in conditionValues", function() {
         const activeAction = makeAction();
-        EpicManager.register(makeCounterEpic(makeEpic(), activeAction, {
-            extraConditions: [[{ type: makeAction(), passive: true }, { type: makeAction(), optional: true }]],
+        EpicStore.register(makeCounterEpic(makeEpic(), activeAction, {
+            extraConditions: [[passive(makeAction()), optional(makeAction())]],
             verify: (conditions, { currentAction }) => {
                 expect(conditions.length).toBe(2);
                 expect(currentAction.type).toBe(activeAction);
             }
         }));
 
-        EpicManager.dispatch(activeAction);
+        EpicStore.dispatch(activeAction);
     });
 
     it("Should update state on anyOf the actions", function() {
         const activeEpic = makeEpic();
         const anyOfAction1 = makeAction();
         const anyOfAction2= makeAction();
-        EpicManager.register(makeCounterEpic(activeEpic, null, {
+        EpicStore.register(makeCounterEpic(activeEpic, null, {
             extraConditions: [
-                EpicManager.anyOf({ type: anyOfAction1 }, { type: anyOfAction2 }),
+                anyOf({ type: anyOfAction1 }, { type: anyOfAction2 }),
                 { type: makeAction(), optional: true },
                 { type: makeAction(), passive: true },
             ]
         }));
 
-        expect(EpicManager.getEpicState(activeEpic).counter).toBe(0);
-        EpicManager.dispatch(anyOfAction1);
-        expect(EpicManager.getEpicState(activeEpic).counter).toBe(1);
-        EpicManager.dispatch(anyOfAction2);
-        expect(EpicManager.getEpicState(activeEpic).counter).toBe(2);
+        expect(EpicStore.getEpicState(activeEpic).counter).toBe(0);
+        EpicStore.dispatch(anyOfAction1);
+        expect(EpicStore.getEpicState(activeEpic).counter).toBe(1);
+        EpicStore.dispatch(anyOfAction2);
+        expect(EpicStore.getEpicState(activeEpic).counter).toBe(2);
     });
 
     it("Should split properly when there are multiple anyOf", function () {
         const epic = makeEpic();
-        EpicManager.register(makeCounterEpic(epic, [
+        EpicStore.register(makeCounterEpic(epic, [
             [makeAction(), makeAction()], // 1, 2
             [makeAction(), makeAction()], // 3, 4
             [makeAction(), makeAction()], // 5, 6
@@ -56,7 +58,7 @@ describe("AnyOf conditions: ", function() {
           * 2, 4, 6
           **/
         
-        const updaters = EpicManager.getEpicUpdaters(epic, 0);
+        const updaters = EpicStore.getEpicUpdaters(epic, 0);
         expect(updaters.length).toBe(2 * 2 * 2);
     });
 });

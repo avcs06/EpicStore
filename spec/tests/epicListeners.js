@@ -1,18 +1,19 @@
-import EpicManager from '../../src/EpicManager';
+import { createStore } from '../../src/EpicStore';
 import { makeGetter, makeCounterEpic } from '../helpers/makeEpic';
 
 const make = makeGetter('epiclisteners');
 const makeEpic = make('epic');
 const makeAction = make('action');
+const EpicStore = createStore(true);
 
 describe("Epic Listeners: ", function () {
     it("Should trigger epic listener with proper params", function () {
         const epic = makeEpic();
         const action = makeAction();
         const listenerSpy = jasmine.createSpy('listener');
-        EpicManager.register(makeCounterEpic(epic, action));
-        EpicManager.addListener([epic], listenerSpy);
-        EpicManager.dispatch(action);
+        EpicStore.register(makeCounterEpic(epic, action));
+        EpicStore.addListener([epic], listenerSpy);
+        EpicStore.dispatch(action);
         expect(listenerSpy).toHaveBeenCalledWith([{ counter: 1 }], { sourceAction: { type: action } });
     });
 
@@ -22,10 +23,10 @@ describe("Epic Listeners: ", function () {
         const action = makeAction();
         const listenerSpy = jasmine.createSpy('listener');
 
-        EpicManager.register(makeCounterEpic(epic1, action));
-        EpicManager.register(makeCounterEpic(epic2, action));
-        EpicManager.addListener([epic1, epic2], listenerSpy);
-        EpicManager.dispatch(action);
+        EpicStore.register(makeCounterEpic(epic1, action));
+        EpicStore.register(makeCounterEpic(epic2, action));
+        EpicStore.addListener([epic1, epic2], listenerSpy);
+        EpicStore.dispatch(action);
 
         expect(listenerSpy).toHaveBeenCalledTimes(1);
         expect(listenerSpy).toHaveBeenCalledWith([{ counter: 1 }, { counter: 1 }], { sourceAction: { type: action } });
@@ -37,13 +38,13 @@ describe("Epic Listeners: ", function () {
         const action = makeAction();
         const listenerSpy = jasmine.createSpy('listener');
 
-        EpicManager.register(makeCounterEpic(epic1, action));
-        EpicManager.register(makeCounterEpic(epic2, action));
+        EpicStore.register(makeCounterEpic(epic1, action));
+        EpicStore.register(makeCounterEpic(epic2, action));
 
-        const removeListener = EpicManager.addListener([epic1, epic2], listenerSpy);
+        const removeListener = EpicStore.addListener([epic1, epic2], listenerSpy);
         removeListener();
 
-        EpicManager.dispatch(action);
+        EpicStore.dispatch(action);
         expect(listenerSpy).not.toHaveBeenCalled();
     });
 
@@ -55,19 +56,19 @@ describe("Epic Listeners: ", function () {
         const action2 = makeAction();
         const listenerSpy = jasmine.createSpy('listener');
 
-        EpicManager.register(makeCounterEpic(epic1, action1));
-        EpicManager.register(makeCounterEpic(epic2, action1));
-        EpicManager.register(makeCounterEpic(epic3, action2));
+        EpicStore.register(makeCounterEpic(epic1, action1));
+        EpicStore.register(makeCounterEpic(epic2, action1));
+        EpicStore.register(makeCounterEpic(epic3, action2));
 
-        EpicManager.addListener([
+        EpicStore.addListener([
             { type: epic1, optional: true },
             { type: epic2, optional: true }
         ], listenerSpy);
 
-        EpicManager.dispatch(action2);
+        EpicStore.dispatch(action2);
         expect(listenerSpy).not.toHaveBeenCalled();
 
-        EpicManager.dispatch(action1);
+        EpicStore.dispatch(action1);
         expect(listenerSpy).toHaveBeenCalled();
     });
 
@@ -78,18 +79,18 @@ describe("Epic Listeners: ", function () {
         const action2 = makeAction();
         const listenerSpy = jasmine.createSpy('listener');
 
-        EpicManager.register(makeCounterEpic(epic1, action1));
-        EpicManager.register(makeCounterEpic(epic2, action2));
+        EpicStore.register(makeCounterEpic(epic1, action1));
+        EpicStore.register(makeCounterEpic(epic2, action2));
 
-        EpicManager.addListener([
+        EpicStore.addListener([
             { type: epic1, passive: true },
             { type: epic2, optional: true }
         ], listenerSpy);
 
-        EpicManager.dispatch(action1);
+        EpicStore.dispatch(action1);
         expect(listenerSpy).not.toHaveBeenCalled();
 
-        EpicManager.dispatch(action2);
+        EpicStore.dispatch(action2);
         expect(listenerSpy).toHaveBeenCalled();
     });
 });

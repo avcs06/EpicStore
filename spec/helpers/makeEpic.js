@@ -1,13 +1,13 @@
 import Epic from '../../src/Epic';
-import Action from '../../src/Action';
 import Updater from '../../src/Updater';
+import Condition from '../../src/Condition';
 
 export const makeGetter = (() => {
     let counter = 0;
     return name => type => () => name.toUpperCase() + '_' + type.toUpperCase() + '__' + (counter++);
 })();
 
-export const makeCounterEpic = (epic, action, additionalParams = {}) => {
+export const makeCounterEpic = (epic, condition, additionalParams = {}) => {
     const {
         extraConditions = [],
         stateChange = state => ({ counter: state.counter + 1 }),
@@ -18,9 +18,9 @@ export const makeCounterEpic = (epic, action, additionalParams = {}) => {
 
     return new Epic(epic, { counter: 0 }, { counter: 0 }, [
         new Updater([
-            ...(action ?
-                    action.constructor === Array ?
-                        action : [action.type ? action : new Action(action)] : []),
+            ...(condition ?
+                    condition.constructor === Array ?
+                    condition : [condition.type ? condition : new Condition(condition)] : []),
             ...extraConditions
         ], (conditions, { state, scope, currentAction }) => {
             if (additionalParams.withError) {
