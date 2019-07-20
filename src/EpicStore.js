@@ -132,8 +132,7 @@ export const createStore = debug => {
                 epic._scope = epic.hasOwnProperty('_scope') ? epic._scope : epic.scope;
 
                 const handlerUpdate = handler(getHandlerParams(conditions), {
-                    state: epic._state, prevState: epic.state,
-                    scope: epic._scope, prevScope: epic.scope,
+                    state: epic.state, scope: epic.scope,
                     sourceAction, currentAction: action
                 });
 

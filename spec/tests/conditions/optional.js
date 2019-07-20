@@ -57,19 +57,4 @@ describe("Optional condition: ", function() {
         expect(EpicStore.getEpicState(epic1).counter).toBe(1);
         expect(EpicStore.getEpicState(epic2).counter).toBe(1);
     });
-
-    // TODO: Known issue will execute epic1 twice
-    it("Should trigger handler twice if optional condition met after active condition", function() {
-        const epic1 = makeEpic();
-        const epic2 = makeEpic();
-        const action = makeAction();
-        EpicStore.register(makeCounterEpic(epic1, action, {
-            extraConditions: [{ type: epic2, optional: true }]
-        }));
-        EpicStore.register(makeCounterEpic(epic2, action));
-
-        EpicStore.dispatch(action);
-        expect(EpicStore.getEpicState(epic1).counter).toBe(2);
-        expect(EpicStore.getEpicState(epic2).counter).toBe(1);
-    });
 });
