@@ -1,12 +1,8 @@
 import { createStore } from '../../src/EpicStore';
-import Updater from '../../src/Updater';
 import { error } from '../../src/Errors';
+import Updater from '../../src/Updater';
 import Epic from '../../src/Epic';
-import { makeGetter, makeCounterEpic } from '../helpers/makeEpic';
-
-const make = makeGetter('errorchecks');
-const makeEpic = make('epic');
-const makeAction = make('action');
+import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
 const EpicStore = createStore(true);
 
 const invariantError = message => {
@@ -41,22 +37,14 @@ describe("Invalid Entries: should throw error", function() {
     expect(() => {
       EpicStore.register({
         name: 'INVALID_EPIC_3',
-        updaters: [
-          new Updater([
-            { type: true },
-          ], Function.prototype)
-        ]
+        updaters: [new Updater([{ type: true }], Function.prototype)]
       });
     }).toThrow(invariantError(error('invalidConditionType', 'INVALID_EPIC_3', 0, 0)));
 
     expect(() => {
       EpicStore.register({
         name: 'INVALID_EPIC_4',
-        updaters: [
-          new Updater([
-            { type: 'INVALID_ACTION_3', selector: 'id' },
-          ], Function.prototype)
-        ]
+        updaters: [new Updater([{ type: 'INVALID_ACTION_3', selector: 'id' }], Function.prototype)]
       });
     }).toThrow(invariantError(error('invalidConditionSelector', 'INVALID_EPIC_4', 0, 'INVALID_ACTION_3')));
   });
@@ -67,9 +55,7 @@ describe("Invalid Entries: should throw error", function() {
       state: { counter: 1 },
       updaters: [
         new Updater(['INVALID_ACTION_4'], ([], { state }) => ({
-          state: {
-            counter: state.counter + 1
-          }
+          state: { counter: state.counter + 1 }
         }))
       ]
     });
@@ -107,14 +93,6 @@ describe("Invalid Entries: should throw error", function() {
     expect(() => {
       EpicStore.dispatch(action);
     }).toThrow(invariantError(error('invalidHandlerUpdate', epic, 0)));
-  });
-
-  it("on optional + passive condition", function () {
-    const epic = makeEpic();
-    const action = makeAction();
-    expect(() => {
-      EpicStore.register(makeCounterEpic(epic, { type: action, passive: true, optional: true }));
-    }).toThrow(invariantError(error('invalidConditionOP', epic, 0, action)));
   });
 
   it("on epic as external action", function () {

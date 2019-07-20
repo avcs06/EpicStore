@@ -1,9 +1,5 @@
 import { createStore } from '../../../src/EpicStore';
-import { makeGetter, makeCounterEpic } from '../../helpers/makeEpic';
-
-const make = makeGetter('passive');
-const makeEpic = make('epic');
-const makeAction = make('action');
+import { makeEpic, makeAction, makeCounterEpic } from '../../helpers/makeEpic';
 const EpicStore = createStore(true);
 
 describe("Passive condition: ", function() {
@@ -21,7 +17,8 @@ describe("Passive condition: ", function() {
         expect(EpicStore.getEpicState(epic2).counter).toBe(0);
     });
 
-    it("Should trigger handler if passive condition is updated after active condition", function () {
+    // To provide the latest state of passive action
+    it("Should trigger handler even if passive condition is updated after active condition", function () {
         const epic1 = makeEpic();
         const epic2 = makeEpic();
         const epic3 = makeEpic();

@@ -1,36 +1,31 @@
 import { createStore } from '../../../src/EpicStore';
-import { makeGetter, makeCounterEpic } from '../../helpers/makeEpic';
-import { anyOf, passive, optional } from '../../../src/Condition';
-
-const make = makeGetter('anyof');
-const makeEpic = make('epic');
-const makeAction = make('action');
+import { makeEpic, makeAction, makeCounterEpic } from '../../helpers/makeEpic';
+import { anyOf } from '../../../src/Condition';
 const EpicStore = createStore(true);
 
 describe("AnyOf conditions: ", function() {
     it("Should receive two values only in conditionValues", function() {
-        const activeAction = makeAction();
-        EpicStore.register(makeCounterEpic(makeEpic(), activeAction, {
-            extraConditions: [[passive(makeAction()), optional(makeAction())]],
+        const action1 = makeAction();
+        const action2 = makeAction();
+        const action3 = makeAction();
+        EpicStore.register(makeCounterEpic(makeEpic(), action1, {
+            extraConditions: [[action2, action3]],
             verify: (conditions, { currentAction }) => {
                 expect(conditions.length).toBe(2);
-                expect(currentAction.type).toBe(activeAction);
+                // Should provide proper action as currentAction
+                expect(currentAction.type).toBe(action2);
             }
         }));
 
-        EpicStore.dispatch(activeAction);
+        EpicStore.dispatch(action2);
     });
 
     it("Should update state on anyOf the actions", function() {
         const activeEpic = makeEpic();
         const anyOfAction1 = makeAction();
         const anyOfAction2= makeAction();
-        EpicStore.register(makeCounterEpic(activeEpic, null, {
-            extraConditions: [
-                anyOf({ type: anyOfAction1 }, { type: anyOfAction2 }),
-                { type: makeAction(), optional: true },
-                { type: makeAction(), passive: true },
-            ]
+        EpicStore.register(makeCounterEpic(activeEpic, makeAction(), {
+            extraConditions: [anyOf(anyOfAction1, anyOfAction2)]
         }));
 
         expect(EpicStore.getEpicState(activeEpic).counter).toBe(0);

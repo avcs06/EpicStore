@@ -16,8 +16,6 @@ function processCondition(currentError, condition, index) {
     invariant(typeof condition.type === 'string', indexError('invalidConditionType'));
 
     const typeError = currentError(condition.type);
-    invariant(!condition.passive || !condition.optional, typeError('invalidConditionOP'));
-
     if (condition.selector) {
         invariant(typeof condition.selector === 'function', typeError('invalidConditionSelector'));
         condition.selector = memoize(condition.selector, { max: 1 });
@@ -122,9 +120,8 @@ export const createStore = debug => {
                 // if all active conditions are not changed, dont update the epic
                 // PS: activeCondition doesnt need to change if it is external
                 if (!conditions.every(condition => (
-                    condition === activeCondition ||
-                    condition.optional || condition.passive ||
-                    didConditionChange(condition)
+                    condition === activeCondition || condition.passive ||
+                    !condition.required || didConditionChange(condition)
                 ))) return;
 
                 const epic = epicRegistry[epicName];
@@ -132,7 +129,8 @@ export const createStore = debug => {
                 epic._scope = epic.hasOwnProperty('_scope') ? epic._scope : epic.scope;
 
                 const handlerUpdate = handler(getHandlerParams(conditions), {
-                    state: epic.state, scope: epic.scope,
+                    state: epic.state, currentCycleState: epic._state,
+                    scope: epic.scope, currentCycleScope: epic._scope,
                     sourceAction, currentAction: action
                 });
 
@@ -186,6 +184,9 @@ export const createStore = debug => {
                     listeners.forEach(listener => {
                         if (listener.processed) return;
 
+                        let hasRequired = false;
+                        let hasChangedActive = false;
+                        let hasUnchangedRequired = false;
                         const { conditions, handler } = listener;
                         conditions.forEach(condition => {
                             if (actionCache[condition.type]) {
@@ -193,24 +194,28 @@ export const createStore = debug => {
                                     type: condition.type,
                                     payload: actionCache[condition.type]
                                 });
+
+                                if (condition.required) {
+                                    hasRequired = true;
+                                    if (!didConditionChange(condition)) {
+                                        hasUnchangedRequired = true;
+                                    }
+                                } else if (!condition.passive && didConditionChange(condition)) {
+                                    hasChangedActive = true;
+                                }
+                            } else if (condition.required) {
+                                hasRequired = true;
+                                hasUnchangedRequired = true;
                             }
                         });
 
-                        // If all conditions are optional or passive
-                        // then atleast one optional condition should change
-                        // Else all active conditions should change
-                        if (
-                            conditions.every(({ optional, passive }) => (optional || passive)) ?
-                                conditions.some(condition => condition.optional && didConditionChange(condition)) :
-                                conditions.every(condition => (
-                                    condition.optional || condition.passive || didConditionChange(condition)
-                                ))
-                        ) {
+                        // If there are required conditions all of them should change,
+                        // else at least one active condition should change
+                        if (hasRequired ? !hasUnchangedRequired : hasChangedActive) {
                             try {
                                 listener.processed = true;
                                 handler(getHandlerParams(conditions), { sourceAction });
                             } catch (e) {
-                                listener.hasError = true;
                                 postProcessingErrors.push(e);
                             }
                             epicListenerCache.push(listener);
@@ -231,17 +236,16 @@ export const createStore = debug => {
 
             epicListenerCache.forEach(listener => {
                 listener.conditions.forEach(condition => {
-                    if (!listener.hasError) {
+                    if (condition.hasOwnProperty('_value')) {
                         condition.value = condition._value;
                     }
                     delete condition._value;
                 });
-                delete listener.hasError;
                 delete listener.processed;
             });
 
             conditionCache.forEach(condition => {
-                if (!processingError) {
+                if (!processingError && condition.hasOwnProperty('_value')) {
                     condition.value = condition._value;
                 }
                 delete condition._value;
@@ -293,6 +297,10 @@ export const createStore = debug => {
             return getEpic(epicName, 'updaters')[index].map(({ conditions }) => ({
                 conditions: conditions.map(condition => ({ ...condition }))
             }));
+        };
+
+        store.getEpicListeners = function (conditionType) {
+            return epicListeners[conditionType];
         };
     }
 

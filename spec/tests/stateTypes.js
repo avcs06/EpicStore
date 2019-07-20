@@ -1,11 +1,7 @@
 import { createStore } from '../../src/EpicStore';
-import { makeGetter } from '../helpers/makeEpic';
+import { makeEpic, makeAction } from '../helpers/makeEpic';
 import Epic from '../../src/Epic';
 import Updater from '../../src/Updater';
-
-const make = makeGetter('statetypes');
-const makeEpic = make('epic');
-const makeAction = make('action');
 const EpicStore = createStore(true);
 
 describe("State types: ", function () {

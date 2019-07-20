@@ -1,9 +1,5 @@
 import { createStore } from '../../src/EpicStore';
-import { makeGetter, makeCounterEpic } from '../helpers/makeEpic';
-
-const make = makeGetter('sideeffects');
-const makeEpic = make('epic');
-const makeAction = make('action');
+import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
 const EpicStore = createStore(true);
 
 describe("Side Effects: ", function () {

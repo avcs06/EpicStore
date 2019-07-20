@@ -1,7 +1,6 @@
 export const Errors = {
     invalidConditionType: 'Epic: [0], Updater: [1], Condition: [2] -> Invalid Type: Condition.type should be of type string',
     invalidConditionSelector: 'Epic: [0], Updater: [1], Condition: [2] -> Invalid Type: Condition.selector (if provided) should be of type function',
-    invalidConditionOP: 'Epic: [0], Updater: [1], Condition: [2] -> A condition cannot be both passive and optional.',
     duplicateEpic: 'Epic: [0] -> Epic with same name is already registered',
     noPassiveUpdaters: 'Epic: [0], Updater: [1] -> Updaters should have atleast one non passive condition',
     noDispatchInEpicListener: 'Epic listeners should not dispatch actions',

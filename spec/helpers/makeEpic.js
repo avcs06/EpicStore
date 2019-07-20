@@ -2,11 +2,13 @@ import Epic from '../../src/Epic';
 import Updater from '../../src/Updater';
 import Condition from '../../src/Condition';
 
-export const makeGetter = (() => {
+const make = (() => {
     let counter = 0;
-    return name => type => () => name.toUpperCase() + '_' + type.toUpperCase() + '__' + (counter++);
+    return type => () => type.toUpperCase() + '__' + (counter++);
 })();
 
+export const makeEpic = make('epic');
+export const makeAction = make('action');
 export const makeCounterEpic = (epic, condition, additionalParams = {}) => {
     const {
         extraConditions = [],

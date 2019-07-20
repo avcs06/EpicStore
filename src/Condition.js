@@ -3,14 +3,12 @@ const conditionObject = condition =>
 
 export const anyOf = (...conditions) => conditions;
 export const passive = condition => ({ ...conditionObject(condition), passive: true });
-export const optional = condition => ({ ...conditionObject(condition), optional: true });
+export const required = condition => ({ ...conditionObject(condition), required: true });
+export const withValue = (condition, value) => ({ ...conditionObject(condition), value });
 export const withSelector = (condition, selector) => ({ ...conditionObject(condition), selector });
 
 export default class Condition {
-    constructor(type, selector, passive, optional) {
+    constructor(type) {
         this.type = type;
-        this.selector = selector;
-        this.passive = Boolean(passive);
-        this.optional = Boolean(optional);
     }
 };
