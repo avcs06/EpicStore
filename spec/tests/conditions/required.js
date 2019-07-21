@@ -1,7 +1,7 @@
 import { createStore } from '../../../src/EpicStore';
 import { required } from '../../../src/Condition';
 import { makeEpic, makeAction, makeCounterEpic } from '../../helpers/makeEpic';
-const EpicStore = createStore(true);
+const EpicStore = createStore({ debug: true });
 
 describe("Passive condition: ", function () {
     it("Should not trigger handler if a required condtion is not met", function () {

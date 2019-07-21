@@ -1,7 +1,7 @@
 import { createStore } from '../../src/EpicStore';
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
 import { passive, required, withValue, withSelector } from '../../src/Condition';
-const EpicStore = createStore(true);
+const EpicStore = createStore({ debug: true });
 
 describe("Epic Listeners: ", function () {
     it("Should trigger epic listener with proper params", function () {
@@ -155,5 +155,18 @@ describe("Epic Listeners: ", function () {
         expect(() => EpicStore.dispatch(action)).toThrow(['Fake Error', 'Fake Error']);
         expect(listenerSpy1).toHaveBeenCalled();
         expect(listenerSpy2).toHaveBeenCalled();
+    });
+
+    it("Removing multiple epic listeners should not throw error", function () {
+        const epic = makeEpic();
+        const action = makeAction();
+        const listenerSpy1 = jasmine.createSpy('listener1');
+        const listenerSpy2 = jasmine.createSpy('listener2');
+
+        EpicStore.register(makeCounterEpic(epic, action));
+        const removeListener1 = EpicStore.addListener([epic], listenerSpy1);
+        const removeListener2 = EpicStore.addListener([epic], listenerSpy2);
+        removeListener1();
+        expect(() => removeListener2()).not.toThrow();
     });
 });

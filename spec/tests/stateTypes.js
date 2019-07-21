@@ -2,7 +2,7 @@ import { createStore } from '../../src/EpicStore';
 import { makeEpic, makeAction } from '../helpers/makeEpic';
 import Epic from '../../src/Epic';
 import Updater from '../../src/Updater';
-const EpicStore = createStore(true);
+const EpicStore = createStore({ debug: true });
 
 describe("State types: ", function () {
     it("Null State to primitive", function () {

@@ -4,7 +4,7 @@ import { withSelector, withValue, required } from '../../../src/Condition';
 import Epic from '../../../src/Epic';
 import Action from '../../../src/Action';
 import Updater from '../../../src/Updater';
-const EpicStore = createStore(true);
+const EpicStore = createStore({ debug: true });
 
 describe("Condition Selector: ", function () {
     it("Should trigger handler only when the selector value changed", function () {

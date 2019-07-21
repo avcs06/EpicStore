@@ -1,6 +1,6 @@
 import { createStore } from '../../src/EpicStore';
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
-const EpicStore = createStore(true);
+const EpicStore = createStore({ debug: true });
 
 describe("Side Effects: ", function () {
     it("Should update epic state on action", function () {

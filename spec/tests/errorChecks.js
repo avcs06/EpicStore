@@ -3,7 +3,7 @@ import { error } from '../../src/Errors';
 import Updater from '../../src/Updater';
 import Epic from '../../src/Epic';
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
-const EpicStore = createStore(true);
+const EpicStore = createStore({ debug: true });
 
 const invariantError = message => {
   const error = new Error(message);

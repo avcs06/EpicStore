@@ -5,7 +5,7 @@ import Condition from '../../src/Condition';
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
 import Epic from '../../src/Epic';
 import Updater from '../../src/Updater';
-const EpicStore = createStore(true);
+const EpicStore = createStore({ debug: true });
 
 describe("Basic functionalities", function() {
     it("Should update epic state and scope on action", function() {
@@ -89,5 +89,22 @@ describe("Basic functionalities", function() {
         expect(EpicStore.getEpicListeners(epic)[0].conditions[0].value, undefined);
         expect(() => EpicStore.dispatch(action)).toThrow(['Fake Error']);
         expect(EpicStore.getEpicListeners(epic)[0].conditions[0].value.counter, 1);
+    });
+
+    it('Should not dispatch epic action on passive update', function () {
+        const epic1 = makeEpic();
+        const epic2 = makeEpic();
+        const action = makeAction();
+
+        EpicStore.register(new Epic(epic1, {}, null, [
+            new Updater([action], () => ({
+                state: { a: 1 },
+                passiveUpdate: true
+            }))
+        ]));
+        EpicStore.register(makeCounterEpic(epic2, epic1));
+
+        EpicStore.dispatch(action);
+        expect(EpicStore.getEpicState(epic2).counter).toBe(0);
     });
 });

@@ -1,7 +1,7 @@
 import { createStore } from '../../../src/EpicStore';
 import { makeEpic, makeAction, makeCounterEpic } from '../../helpers/makeEpic';
 import { anyOf } from '../../../src/Condition';
-const EpicStore = createStore(true);
+const EpicStore = createStore({ debug: true });
 
 describe("AnyOf conditions: ", function() {
     it("Should receive two values only in conditionValues", function() {
