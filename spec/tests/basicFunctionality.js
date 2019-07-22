@@ -99,7 +99,7 @@ describe("Basic functionalities", function() {
         EpicStore.register(new Epic(epic1, {}, null, [
             new Updater([action], () => ({
                 state: { a: 1 },
-                passiveUpdate: true
+                passive: true
             }))
         ]));
         EpicStore.register(makeCounterEpic(epic2, epic1));
