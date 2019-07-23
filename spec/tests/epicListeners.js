@@ -10,7 +10,6 @@ describe("Epic Listeners: ", function () {
         const listenerSpy = jasmine.createSpy('listener');
         EpicStore.register(makeCounterEpic(epic, action));
         EpicStore.addListener([epic], listenerSpy);
-        debugger;
         EpicStore.dispatch(action);
         expect(listenerSpy).toHaveBeenCalledWith([{ counter: 1 }], { sourceAction: { type: action } });
     });

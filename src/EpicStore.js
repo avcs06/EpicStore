@@ -3,7 +3,7 @@ import "core-js/es/symbol";
 import memoize from 'memoizee';
 import invariant from 'invariant';
 import { error, makeError } from './Errors';
-import { initialValue, freeze, unfreeze } from './Frozen';
+import { initialValue, freeze, unfreeze, merge, MERGE_ERROR } from './Frozen';
 
 function processCondition(currentError, condition, index) {
     if (condition.constructor === Array) {
@@ -61,7 +61,7 @@ const getHandlerParams = conditions => conditions.map(condition => {
 
 const getRegexFromPattern = pattern => new RegExp('^' + pattern.replace(/\*/g, '.*?') + '$');
 
-const resetEpic = (epic, shouldUpdate) => {
+const resetEpic = function (epic, shouldUpdate) {
     if (shouldUpdate) {
         epic.state = epic._state;
         epic.scope = epic._scope;
@@ -71,7 +71,15 @@ const resetEpic = (epic, shouldUpdate) => {
     delete epic._scope;
 };
 
-export const createStore = ({ debug = false, patterns = false }) => {
+const resetCondition = function (shouldUpdate, condition) {
+    if (shouldUpdate && condition.hasOwnProperty('_value')) {
+        condition.value = condition._value;
+    }
+    delete condition._value;
+    delete condition.matchedPattern;
+}
+
+export const createStore = ({ debug = false, patterns = false, undo = false, maxUndoStack = 10 }) => {
     const store = {};
     const epicRegistry = {};
 
@@ -81,7 +89,12 @@ export const createStore = ({ debug = false, patterns = false }) => {
     const epicListeners = {};
     const patternListeners = {};
 
+    let undoStack = [];
+    let redoStack = [];
+
     const defaultEpicInstanceKey = Symbol('defaultEpicInstanceKey');
+    const UNDO_ACTION = { type: 'STORE_UNDO' };
+    const REDO_ACTION = { type: 'STORE_REDO' };
 
     store.register = function ({ name, state = initialValue, scope = initialValue, updaters = [], instance = false }) {
         let currentError = makeError(name);
@@ -126,8 +139,128 @@ export const createStore = ({ debug = false, patterns = false }) => {
         }
     };
 
+    const getInstances = epic => Object.keys(epic)
+        .concat(epic[defaultEpicInstanceKey] ? defaultEpicInstanceKey : []);
+
+    const processEpicListeners = (epicCache, sourceAction) => {
+        const epicListenerCache = [];
+        const postProcessingErrors = [];
+        const updatedEpics = Object.keys(epicCache);
+        updatedEpics.forEach(epicName => {
+            let matchedPatterns = [];
+            if (patterns) {
+                Object.keys(patternListeners).forEach(key => {
+                    if (getRegexFromPattern(key).test(epicName))
+                        matchedPatterns.push(key);
+                });
+            }
+
+            const epic = epicRegistry[epicName];
+            getInstances(epicCache[epicName]).forEach(id => {
+                const listeners = !epicListeners[epicName] ? [] :
+                    (epicListeners[epicName][id] || epicListeners[epicName][defaultEpicInstanceKey] || []);
+
+                matchedPatterns.forEach(key => {
+                    listeners.push(
+                        ...(patternListeners[key][id] || patternListeners[key][defaultEpicInstanceKey] || []));
+                });
+
+                listeners.forEach(listener => {
+                    if (listener.processed) return;
+                    listener.processed = true;
+                    epicListenerCache.push(listener);
+
+                    let hasRequired = false;
+                    let hasChangedActive = false;
+                    let hasUnchangedRequired = false;
+                    const { conditions, handler } = listener;
+
+                    conditions.forEach(condition => {
+                        const { type, id, passive, required } = condition;
+                        const epicChange = epicCache[type];
+                        const payload = id ? epicChange[id] :
+                            (epic.instances ? epicChange : epicChange[defaultEpicInstanceKey]);
+
+                        if (patterns && /\*/.test(type)) {
+                            const regex = getRegexFromPattern(type);
+                            if (updatedEpics.some(key => regex.test(key) &&
+                                (!id || epicCache[key][id]))) {
+                                if (required) {
+                                    hasRequired = true;
+                                } else if (!passive) {
+                                    hasChangedActive = true;
+                                }
+                            } else if (required) {
+                                hasRequired = true;
+                                hasUnchangedRequired = true;
+                            }
+                        } else if (payload) {
+                            condition._value = getSelectorValue(condition, { type, payload });
+
+                            if (required) {
+                                hasRequired = true;
+                                if (!didConditionChange(condition)) {
+                                    hasUnchangedRequired = true;
+                                }
+                            } else if (!passive && didConditionChange(condition)) {
+                                hasChangedActive = true;
+                            }
+                        } else if (required) {
+                            hasRequired = true;
+                            hasUnchangedRequired = true;
+                        }
+                    });
+
+                    // If there are required conditions all of them should change,
+                    // else at least one active condition should change
+                    if (hasRequired ? !hasUnchangedRequired : hasChangedActive) {
+                        try {
+                            handler(getHandlerParams(conditions), { sourceAction });
+                        } catch (e) {
+                            postProcessingErrors.push(e);
+                        }
+                    }
+                });
+            });
+        });
+
+        epicListenerCache.forEach(listener => {
+            listener.conditions.forEach(resetCondition.bind(null, true));
+            delete listener.processed;
+        });
+
+        return errors;
+    };
+
     store.dispatch = (() => {
-        let sourceAction, epicCache, actionCache, conditionCache, inCycle, afterCycle, epicListenerCache;
+        let sourceAction, epicCache, actionCache, conditionCache, inCycle, afterCycle, undoEntry;
+
+        const makeHandleUpdate = (instance, update) => (entity, callback = Function.prototype) => {
+            if (update.hasOwnProperty(entity)) {
+                let updatedEntity, undoChange, redoChange;
+                try {
+                    [updatedEntity, undoChange, redoChange] =
+                        merge(unfreeze(instance['_' + entity]), update[entity]);
+                } catch (e) {
+                    invariant(e !== MERGE_ERROR,
+                        error('invalidHandlerUpdate', epicName, index));
+                    throw e;
+                }
+
+                instance['_' + entity] = freeze(updatedEntity);
+                if (undo) {
+                    undoEntry[epicName] = {
+                        ...(undoEntry[epicName] || {}),
+                        [id]: {
+                            ...(undoEntry[epicName][id] || {}),
+                            [entity]: { undo: undoChange, redo: redoChange }
+                        }
+                    };
+                }
+
+                callback();
+            }
+        };
 
         const processUpdater = function (action, activeCondition, updater, forcePassiveUpdate) {
             const { epic: epicName, conditions, handler, index } = updater;
@@ -154,8 +287,8 @@ export const createStore = ({ debug = false, patterns = false }) => {
             } else if (action.target) {
                 if (!epic.instances[action.target]) {
                     epic.instances[action.target] = {
-                        state: freeze(unfreeze(epic.state, {})),
-                        scope: freeze(unfreeze(epic.scope, {})),
+                        state: freeze(unfreeze(epic.state)),
+                        scope: freeze(unfreeze(epic.scope)),
                     }
                 }
                 instances = [[epic.instances[action.target], action.target]];
@@ -173,20 +306,13 @@ export const createStore = ({ debug = false, patterns = false }) => {
                     sourceAction, currentAction: action
                 });
 
-                if (handlerUpdate.hasOwnProperty('scope')) {
-                    instance._scope = freeze(unfreeze(instance._scope, handlerUpdate.scope,
-                        error('invalidHandlerUpdate', epicName, index)));
-                }
-
-                if (handlerUpdate.hasOwnProperty('state')) {
-                    instance._state = freeze(unfreeze(instance._state, handlerUpdate.state,
-                        error('invalidHandlerUpdate', epicName, index)));
-
-                    epicCache[epicName] = { ...(epicCache[epicName] || {}), [id]: instance._state };
+                const handleUpdate = makeHandleUpdate(instance, handlerUpdate);
+                handleUpdate(scope);
+                handleUpdate(state, () => {
                     if (!forcePassiveUpdate && !handlerUpdate.passive) {
                         processAction({ type: epicName, payload: instance._state });
                     }
-                }
+                });
 
                 if (handlerUpdate.hasOwnProperty('actions')) {
                     handlerUpdate.actions.forEach(
@@ -239,6 +365,7 @@ export const createStore = ({ debug = false, patterns = false }) => {
 
             // Fresh dispatch cycle
             inCycle = true;
+            undoEntry = {};
             epicCache = {};
             actionCache = {};
             conditionCache = [];
@@ -257,113 +384,31 @@ export const createStore = ({ debug = false, patterns = false }) => {
             inCycle = false;
             afterCycle = true;
 
-            const postProcessingErrors = [];
-            const updatedEpics = Object.keys(epicCache);
-            updatedEpics.forEach(epicName => {
-                let matchedPatterns = [];
-                if (patterns) {
-                    Object.keys(patternListeners).forEach(key => {
-                        if (getRegexFromPattern(key).test(epicName))
-                            matchedPatterns.push(key);
+            // handle epic listeners
+            const postProcessingErrors = processEpicListeners(epicCache, sourceAction);
+
+            // Update or reset conditions
+            conditionCache.forEach(resetCondition.bind(null, !processingError));
+
+            // Update or reset epics
+            Object.keys(epicCache).forEach(epicName => {
+                const epic = epicRegistry[epicName];
+                if (!epic.instances) {
+                    resetEpic(epic, !processingError);
+                } else {
+                    Object.keys(epicCache[epicName]).forEach(id => {
+                        resetEpic(epic[id], !processingError);
                     });
                 }
-
-                const epic = epicRegistry[epicName];
-                Object.keys(epicCache[epicName])
-                    .concat(Object.getOwnPropertySymbols(epicCache[epicName]))
-                        .forEach(id => {
-                    if (!processingError) {
-                        const listeners = !epicListeners[epicName] ? [] :
-                            (epicListeners[epicName][id] || epicListeners[epicName][defaultEpicInstanceKey] || []);
-
-                        matchedPatterns.forEach(key => {
-                            listeners.push(
-                                ...(patternListeners[key][id] || patternListeners[key][defaultEpicInstanceKey] || []));
-                        });
-
-                        listeners.forEach(listener => {
-                            if (listener.processed) return;
-                            listener.processed = true;
-                            epicListenerCache.push(listener);
-
-                            let hasRequired = false;
-                            let hasChangedActive = false;
-                            let hasUnchangedRequired = false;
-                            const { conditions, handler } = listener;
-
-                            conditions.forEach(condition => {
-                                const { type, id, passive, required } = condition;
-                                if (patterns && /\*/.test(type)) {
-                                    const regex = getRegexFromPattern(type);
-                                    if (updatedEpics.some(key => regex.test(key) &&
-                                        (!id || epicCache[key][id]))) {
-                                        if (required) {
-                                            hasRequired = true;
-                                        } else if (!passive) {
-                                            hasChangedActive = true;
-                                        }
-                                    } else if (required) {
-                                        hasRequired = true;
-                                        hasUnchangedRequired = true;
-                                    }
-                                } else if (epicCache[type]) {
-                                    condition._value = getSelectorValue(condition, {
-                                        type: type,
-                                        payload: id ? epicCache[type][id] :
-                                            (epic.instances ? epicCache[type] : epicCache[type][defaultEpicInstanceKey])
-                                    });
-
-                                    if (required) {
-                                        hasRequired = true;
-                                        if (!didConditionChange(condition)) {
-                                            hasUnchangedRequired = true;
-                                        }
-                                    } else if (!passive && didConditionChange(condition)) {
-                                        hasChangedActive = true;
-                                    }
-                                } else if (required) {
-                                    hasRequired = true;
-                                    hasUnchangedRequired = true;
-                                }
-                            });
-
-                            // If there are required conditions all of them should change,
-                            // else at least one active condition should change
-                            if (hasRequired ? !hasUnchangedRequired : hasChangedActive) {
-                                try {
-                                    handler(getHandlerParams(conditions), { sourceAction });
-                                } catch (e) {
-                                    postProcessingErrors.push(e);
-                                }
-                            }
-                        });
-                    }
-
-                    if (id !== defaultEpicInstanceKey)
-                        resetEpic(epic.instances[id], !processingError);
-                });
-
-                if (!epic.instances)
-                    resetEpic(epic, !processingError);
             });
 
-            epicListenerCache.forEach(listener => {
-                listener.conditions.forEach(condition => {
-                    if (condition.hasOwnProperty('_value')) {
-                        condition.value = condition._value;
-                    }
-                    delete condition._value;
-                });
-                delete listener.processed;
-            });
-
-            conditionCache.forEach(condition => {
-                if (!processingError && condition.hasOwnProperty('_value')) {
-                    condition.value = condition._value;
-                }
-                delete condition._value;
-                delete condition.matchedPattern;
-            });
+            if (undo && !processingError) {
+                if (undoStack.length === maxUndoStack)
+                    undoStack.shift();
+    
+                undoStack.push(undoEntry);
+                redoStack = [];
+            }
 
             afterCycle = false;
 
@@ -397,6 +442,36 @@ export const createStore = ({ debug = false, patterns = false }) => {
             });
         };
     };
+
+    if (undo) {
+        const handleChange = function (from, to, key) {
+            const entry = from.pop();
+            const epicCache = {};
+
+            Object.keys(entry).forEach(epicName => {
+                const epic = epicRegistry[epicName];
+                epicCache[epicName] = {};
+
+                getInstances(entry[epicName]).forEach(id => {
+                    const instance = id === defaultEpicInstanceKey ? epic : epic.instances[id];
+                    epicCache[epicName][id] = instance.state = freeze(entry[epicName][id][key](unfreeze(instance.state)));
+                });
+            });
+
+            to.push(entry);
+            return epicCache;
+        };
+
+        store.undo = function () {
+            const epicCache = handleChange(undoStack, redoStack, 'undo');
+            processEpicListeners(epicCache, UNDO_ACTION);
+        };
+
+        store.redo = function () {
+            const epicCache = handleChange(redoStack, undoStack, 'redo');
+            processEpicListeners(epicCache, REDO_ACTION);
+        };
+    }
 
     if (debug) {
         const getEpic = function (epicName, key) {
