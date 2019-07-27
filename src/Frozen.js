@@ -18,15 +18,15 @@ export const freeze = object => {
     return object;
 };
 
-export const unfreeze = object => {
+export const clone = object => {
     if (object !== initialValue) {
         if (isObject(object)) {
-            const isArray = isArray(object);
-            const newObject = isArray ? [] : {};
+            const _isArray = isArray(object);
+            const newObject = _isArray ? [] : {};
 
             Object.getOwnPropertyNames(object).forEach(function (prop) {
-                if (isArray && prop === 'length') return;
-                newObject[prop] = unfreeze(object[prop]);
+                if (_isArray && prop === 'length') return;
+                newObject[prop] = clone(object[prop]);
             });
 
             return newObject;
