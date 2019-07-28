@@ -6,7 +6,7 @@ import uglify from 'rollup-plugin-uglify';
 var env = process.env.NODE_ENV
 var config = {
     format: 'umd',
-    moduleName: 'EpicManager',
+    moduleName: 'EpicStore',
     plugins: [
         nodeResolve({
             jsnext: true
