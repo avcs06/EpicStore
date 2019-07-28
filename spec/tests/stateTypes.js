@@ -5,20 +5,6 @@ import Updater from '../../src/Updater';
 const EpicStore = createStore({ debug: true });
 
 describe("State types: ", function () {
-    it("Null State to primitive", function () {
-        const epic = makeEpic();
-        const action = makeAction();
-        EpicStore.register(new Epic(epic, null, null, [
-            new Updater([action], function ($0, { state }) {
-                return {
-                    state: 1
-                }
-            })
-        ]));
-        EpicStore.dispatch(action);
-        expect(EpicStore.getEpicState(epic)).toBe(1);
-    });
-
     it("Primitive State to primitive", function () {
         const epic = makeEpic();
         const action = makeAction();
@@ -61,7 +47,7 @@ describe("State types: ", function () {
         expect(EpicStore.getEpicState(epic).a.b).toBe(1);
     });
 
-    it("Deep Object State 2", function () {
+    it("Deep Object State 3", function () {
         const epic = makeEpic();
         const action = makeAction();
         EpicStore.register(new Epic(epic, { a: [1, 2], c: 3 }, null, [
@@ -108,6 +94,38 @@ describe("State types: ", function () {
         const action = makeAction();
         EpicStore.register({
             name: epic, updaters: [
+                new Updater([action], function ($0, { state }) {
+                    return {
+                        state: { a: 1 }
+                    }
+                })
+            ]
+        });
+        EpicStore.dispatch(action);
+        expect(EpicStore.getEpicState(epic).a).toBe(1);
+    });
+
+    it("Null State to primitive", function () {
+        const epic = makeEpic();
+        const action = makeAction();
+        EpicStore.register({
+            name: epic, state: null, updaters: [
+                new Updater([action], function ($0, { state }) {
+                    return {
+                        state: 1
+                    }
+                })
+            ]
+        });
+        EpicStore.dispatch(action);
+        expect(EpicStore.getEpicState(epic)).toBe(1);
+    });
+
+    it("Null State to object", function () {
+        const epic = makeEpic();
+        const action = makeAction();
+        EpicStore.register({
+            name: epic, state: null, updaters: [
                 new Updater([action], function ($0, { state }) {
                     return {
                         state: { a: 1 }

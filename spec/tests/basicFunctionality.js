@@ -59,23 +59,23 @@ describe("Basic functionalities", function() {
         EpicStore.register(makeCounterEpic(epic1, action));
         EpicStore.register(makeCounterEpic(epic2, epic1, additionalParams));
         expect(EpicStore.getEpicState(epic1).counter).toBe(0);
-        expect(EpicStore.getEpicScope(epic1).counter).toBe(0);
+        expect(EpicStore.getEpicScope(epic2).counter).toBe(0);
 
         EpicStore.dispatch(action);
         expect(EpicStore.getEpicState(epic1).counter).toBe(1);
-        expect(EpicStore.getEpicScope(epic1).counter).toBe(1);
+        expect(EpicStore.getEpicScope(epic2).counter).toBe(1);
         expect(EpicStore.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(1);
 
         additionalParams.withError = true;
         expect(() => EpicStore.dispatch(action)).toThrow();
         expect(EpicStore.getEpicState(epic1).counter).toBe(1);
-        expect(EpicStore.getEpicScope(epic1).counter).toBe(1);
+        expect(EpicStore.getEpicScope(epic2).counter).toBe(1);
         expect(EpicStore.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(1);
 
         additionalParams.withError = false;
         EpicStore.dispatch(action);
         expect(EpicStore.getEpicState(epic1).counter).toBe(2);
-        expect(EpicStore.getEpicScope(epic1).counter).toBe(2);
+        expect(EpicStore.getEpicScope(epic2).counter).toBe(2);
         expect(EpicStore.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(2);
     });
 

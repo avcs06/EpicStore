@@ -10,10 +10,8 @@ describe("AnyOf conditions: ", function() {
         const action3 = makeAction();
         EpicStore.register(makeCounterEpic(makeEpic(), action1, {
             extraConditions: [[action2, action3]],
-            verify: (conditions, { currentAction }) => {
+            verify: (conditions) => {
                 expect(conditions.length).toBe(2);
-                // Should provide proper action as currentAction
-                expect(currentAction.type).toBe(action2);
             }
         }));
 

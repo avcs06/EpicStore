@@ -1,22 +1,48 @@
-
-import invariant from 'invariant';
+import memoize from 'memoizee';
 
 const isArray = entry => entry.constructor === Array;
 const isObject = entry => entry !== null && typeof entry === "object";
-const shouldFreeze = entry => isObject(entry) || typeof entry === "function";
 export const initialValue = Symbol('initialValue');
 export const MERGE_ERROR = 'MERGE_ERROR';
 
 export const freeze = object => {
-    if (shouldFreeze(object)) {
+    if (isObject(object)) {
         Object.freeze(object);
-        Object.getOwnPropertyNames(object).forEach(function(prop) {
-            freeze(object[prop]);
-        });
+        if (!isArray(object)) {
+            Object.getOwnPropertyNames(object).forEach(prop => freeze(object[prop]));
+        }
     }
 
     return object;
 };
+
+export const isEqual = (() => {
+    let internalMemoizedIsEqual;
+    const isEqual = (object1, object2) => {
+        if (object1 !== object2) {
+            const isObject1 = isObject(object1);
+            const isObject2 = isObject(object2);
+            if (isObject1 === isObject2) {
+                if (!isObject1) return false;
+                const props1 = Object.getOwnPropertyNames(object1);
+                const props2 = Object.getOwnPropertyNames(object2);
+                return (
+                    props1.every(
+                        prop => object2.hasOwnProperty(prop) &&
+                        internalMemoizedIsEqual(object1[prop], object2[prop])
+                    ) && props2.every(prop => object1.hasOwnProperty(prop))
+                );
+            }
+            return false;
+        }
+        return true;
+    };
+
+    return (object1, object2) => {
+        internalMemoizedIsEqual = memoize(isEqual);
+        return internalMemoizedIsEqual(object1, object2);
+    };
+})();
 
 export const clone = object => {
     if (object !== initialValue) {
@@ -79,7 +105,7 @@ export const merge = (_object, object, ignore = false) => {
                     throw MERGE_ERROR;
                 }
             }
-        } else if (!ignore) {
+        } else if (!(_isObject ? isArray(_object) : isArray(object)) && !ignore) {
             throw MERGE_ERROR;
         }
     }

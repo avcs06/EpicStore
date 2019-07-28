@@ -3,12 +3,12 @@ import "core-js/es/symbol";
 import memoize from 'memoizee';
 import invariant from 'invariant';
 import { error, makeError } from './Errors';
-import { initialValue, freeze, clone, merge, MERGE_ERROR } from './Frozen';
+import { initialValue, freeze, clone, merge, isEqual, MERGE_ERROR } from './Object';
 
 const validateAction = action => freeze(typeof action === 'string' ? { type: action } : action);
 const getSelectorValue = ({ selector }, { type, payload }) => selector(payload, type);
 const getRegexFromPattern = pattern => new RegExp('^' + pattern.replace(/\*/g, '.*?') + '$');
-const didConditionChange = condition => condition.hasOwnProperty('_value') && (condition._value !== condition.value);
+const didConditionChange = condition => condition.hasOwnProperty('_value') && !isEqual(condition._value, condition.value);
 
 function processCondition(currentError, condition, index) {
     if (condition.constructor === Array) {
@@ -93,8 +93,8 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
         invariant(!epicRegistry[name], error('duplicateEpic', name));
 
         epicRegistry[name] = {
-            state: freeze(state),
-            scope: freeze(scope),
+            state: freeze(state === null ? initialValue : state),
+            scope: freeze(scope === null ? initialValue : scope),
             updaters: updaters.map(({ conditions, handler }, index) => {
                 currentError = currentError(index);
                 conditions = conditions.map(processCondition.bind(null, currentError));
@@ -218,7 +218,7 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
     store.dispatch = (() => {
         let sourceAction, epicCache, actionCache, conditionCache, inCycle, afterCycle, undoEntry;
 
-        const processUpdater = function (action, activeCondition, updater, forcePassiveUpdate) {
+        const processUpdater = function (activeCondition, updater, forcePassiveUpdate) {
             const { epic: epicName, conditions, handler, index } = updater;
 
             // If this is passive action
@@ -243,7 +243,7 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
             const handlerUpdate = handler(getHandlerParams(conditions), {
                 state: epic.state, currentCycleState: epic._state,
                 scope: epic.scope, currentCycleScope: epic._scope,
-                sourceAction, currentAction: action
+                sourceAction
             });
 
             const handleUpdate = (entity, callback = Function.prototype) => {
@@ -298,7 +298,7 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
 
                     // If this is not external action and condition value didnt change, dont update the epic
                     if (!external && !didConditionChange(activeCondition)) return;
-                    processUpdater(action, activeCondition, arguments[0]);
+                    processUpdater(activeCondition, arguments[0]);
                 }
             });
 
@@ -313,7 +313,7 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
                                 activeCondition.matchedPattern = true;
                                 conditionCache.push(activeCondition);
 
-                                processUpdater(action, activeCondition, arguments[0], key === '*');
+                                processUpdater(activeCondition, arguments[0], key === '*');
                             }
                         });
                     }
@@ -411,11 +411,15 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
         const handleChange = function (from, to, key) {
             const entry = from.pop();
             const epicCache = {};
+            if (!entry) return epicCache;
 
             Object.keys(entry).forEach(epicName => {
                 const epic = epicRegistry[epicName];
+                const epicEntry = entry[epicName];
                 ['state', 'scope'].forEach(entity => {
-                    epic[entity] = freeze(entry[epicName][entity][key](clone(epic[entity])));
+                    if (epicEntry[entity]) {
+                        epic[entity] = freeze(epicEntry[entity][key](clone(epic[entity])));
+                    }
                 });
                 epicCache[epicName] = epic.state;
             });
@@ -435,16 +439,16 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
         };
     }
 
+    const getEpic = function (epicName, key) {
+        const epic = epicRegistry[epicName];
+        return epic ? epic[key] : null;
+    };
+
+    store.getEpicState = function (epicName) {
+        return getEpic(epicName, 'state');
+    };
+
     if (debug) {
-        const getEpic = function (epicName, key) {
-            const epic = epicRegistry[epicName];
-            return epic ? epic[key] : null;
-        };
-
-        store.getEpicState = function (epicName) {
-            return getEpic(epicName, 'state');
-        };
-
         store.getEpicScope = function (epicName) {
             return getEpic(epicName, 'scope');
         };

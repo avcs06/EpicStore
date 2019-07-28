@@ -38,7 +38,7 @@ EpicManager.dispatch(<Action>)
 ```
 
 ## Updater
-`Object<conditions: Array<Condition>, handler: Function<Array<ConditionValue>, Object<state, scope, prevState, prevScope, sourceAction, currentAction, dispatch>>>`
+`Object<conditions: Array<Condition>, handler: Function<Array<ConditionValue>, Object<state, scope, prevState, prevScope, sourceAction,  dispatch>>>`
 
 An updater reacts to dispatched actions, handler will be executed if all the conditions are met.
 * An updater handler can either update state of the epic it is linked to or dispatch more actions or both.
@@ -59,7 +59,7 @@ Updaters listen to conditions which gives more functionalities than actions.
 * ***Selector functions SHOULD BE pure functions*** (number of executions is not gauranteed to one per cycle).
 * **value:** Initial value of the condition
 * **`Array<Condition> | EpicManager.anyOf(...Array<Condition>)`:** When a condition is passed as array of conditions or through anyOf modifier, the full condition set will be split into multiple condition sets.
-    * **Example:** `[[A, B, C], D]` will be evaluated as three different updaters with conditions as `[A, D]`, `[B, D]`, `[C, D]` respectively, the `conditionValues` param of the handler will receive any ***ONE*** of these conditions, user should use `currentAction` param to check which action triggered this handler.
+    * **Example:** `[[A, B, C], D]` will be evaluated as three different updaters with conditions as `[A, D]`, `[B, D]`, `[C, D]` respectively, the `conditionValues` param of the handler will receive any ***ONE*** of these conditions.
 
 ## Epic Listener
 The application can directly listen to changes in epics through Epic Listener. Epic listeners are executed only after the epic cycle is completed and they ***SHOULD NOT*** dispatch new actions.

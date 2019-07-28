@@ -24,12 +24,12 @@ export const makeCounterEpic = (epic, condition, additionalParams = {}) => {
                     condition.constructor === Array ?
                     condition : [condition.type ? condition : new Condition(condition)] : []),
             ...extraConditions
-        ], (conditions, { state, scope, currentAction }) => {
+        ], (conditions, { state, scope }) => {
             if (additionalParams.withError) {
                 throw new Error('Fake Error');
             }
 
-            verify(conditions, { state, scope, currentAction });
+            verify(conditions, { state, scope });
 
             return {
                 state: stateChange(state, conditions),

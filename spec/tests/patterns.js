@@ -140,14 +140,14 @@ describe("Pattern Listeners: ", function () {
         const listenerSpy2 = jasmine.createSpy('listener2');
         const listenerSpy3 = jasmine.createSpy('listener3');
 
-        EpicStore.register(makeCounterEpic('PATTERN_1', [passive(action1), action2]));
-        EpicStore.register(makeCounterEpic('PATTERN_2', [required(action1), action2]));
-        EpicStore.register(makeCounterEpic('PATTERN_3', [action1, action2]));
+        EpicStore.register(makeCounterEpic('B_PATTERN_1', [passive(action1), action2]));
+        EpicStore.register(makeCounterEpic('B_PATTERN_2', [required(action1), action2]));
+        EpicStore.register(makeCounterEpic('B_PATTERN_3', [action1, action2]));
         EpicStore.register(makeCounterEpic(epic, [action3, action2]));
 
-        EpicStore.addListener(['PATTERN_*', epic], listenerSpy1);
-        EpicStore.addListener([required('PATTERN_*'), epic], listenerSpy2);
-        EpicStore.addListener([passive('PATTERN_*'), epic], listenerSpy3);
+        EpicStore.addListener(['B_PATTERN_*', epic], listenerSpy1);
+        EpicStore.addListener([required('B_PATTERN_*'), epic], listenerSpy2);
+        EpicStore.addListener([passive('B_PATTERN_*'), epic], listenerSpy3);
 
         EpicStore.dispatch(action1);
         expect(listenerSpy1).toHaveBeenCalledTimes(1);
