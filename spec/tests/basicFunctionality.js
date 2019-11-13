@@ -37,6 +37,10 @@ describe("Basic functionalities", function() {
         expect(verify).not.toHaveBeenCalled();
     });
 
+    it("Unregister should handle non existant epic gracefully", function () {
+        expect(() => EpicStore.unregister('AVCS')).not.toThrow();
+    });
+
     it("Should dispatch epic action on epic state update", function () {
         const epic1 = makeEpic();
         const epic2 = makeEpic();

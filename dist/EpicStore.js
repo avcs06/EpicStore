@@ -3404,68 +3404,60 @@ var toConsumableArray = function (arr) {
   }
 };
 
+var MERGE_ERROR = 'MERGE_ERROR';
+var INITIAL_VALUE = Symbol('____ricochet_initial_value____');
+
 var isArray$5 = function isArray(entry) {
     return entry.constructor === Array;
 };
 var isObject$6 = function isObject(entry) {
     return entry !== null && (typeof entry === 'undefined' ? 'undefined' : _typeof(entry)) === "object";
 };
-var initialValue = Symbol('initialValue');
-var MERGE_ERROR = 'MERGE_ERROR';
+
+var getOwnProps = function getOwnProps(obj) {
+    return [].concat(toConsumableArray(Object.getOwnPropertyNames(obj)), toConsumableArray(Object.getOwnPropertySymbols ? Object.getOwnPropertySymbols(obj) : []));
+};
+
+var propIt = function propIt(obj, method) {
+    for (var _len = arguments.length, args = Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
+        args[_key - 2] = arguments[_key];
+    }
+
+    var _getOwnProps;
+
+    return (_getOwnProps = getOwnProps(obj))[method].apply(_getOwnProps, args);
+};
 
 var freeze = function freeze(object) {
     if (isObject$6(object)) {
         Object.freeze(object);
-        if (!isArray$5(object)) {
-            Object.getOwnPropertyNames(object).forEach(function (prop) {
-                return freeze(object[prop]);
-            });
-        }
+        propIt(object, 'forEach', function (prop) {
+            return freeze(object[prop]);
+        });
     }
 
     return object;
 };
 
-var isEqual = function () {
-    var internalMemoizedIsEqual = void 0;
-    var isEqual = function isEqual(object1, object2) {
-        if (object1 !== object2) {
-            var isObject1 = isObject$6(object1);
-            var isObject2 = isObject$6(object2);
-            if (isObject1 === isObject2) {
-                if (!isObject1) return false;
-                var props1 = Object.getOwnPropertyNames(object1);
-                var props2 = Object.getOwnPropertyNames(object2);
-                return props1.every(function (prop) {
-                    return object2.hasOwnProperty(prop) && internalMemoizedIsEqual(object1[prop], object2[prop]);
-                }) && props2.every(function (prop) {
-                    return object1.hasOwnProperty(prop);
-                });
-            }
-            return false;
+var isEqual = function isEqual(object1, object2) {
+    if (object1 !== object2) {
+        if (isObject$6(object1) && isObject$6(object2)) {
+            return propIt(object1, 'every', function (prop) {
+                return object2.hasOwnProperty(prop);
+            }) && propIt(object2, 'every', function (prop) {
+                return object1.hasOwnProperty(prop) && isEqual(object1[prop], object2[prop]);
+            });
         }
-        return true;
-    };
-
-    return function (object1, object2) {
-        internalMemoizedIsEqual = memoizee(isEqual);
-        return internalMemoizedIsEqual(object1, object2);
-    };
-}();
+        return false;
+    }
+    return true;
+};
 
 var clone = function clone(object) {
-    if (object !== initialValue) {
-        if (isObject$6(object)) {
-            var _isArray = isArray$5(object);
-            var newObject = _isArray ? [] : {};
-
-            Object.getOwnPropertyNames(object).forEach(function (prop) {
-                if (_isArray && prop === 'length') return;
-                newObject[prop] = clone(object[prop]);
-            });
-
-            return newObject;
-        }
+    if (isObject$6(object)) {
+        return propIt(object, 'reduce', function (a, prop) {
+            a[prop] = clone(object[prop]);return a;
+        }, isArray$5(object) ? [] : {});
     }
 
     return object;
@@ -3479,10 +3471,11 @@ var makeApplyChanges = function makeApplyChanges(changes) {
     };
 };
 
+// Arrays will be considered as primitives when merging, full replace
 var merge = function merge(_object, object) {
     var ignore = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
 
-    if (_object !== initialValue) {
+    if (_object !== INITIAL_VALUE) {
         var _isObject = isObject$6(_object);
         if (isObject$6(object) === _isObject) {
             if (_isObject) {
@@ -3492,12 +3485,8 @@ var merge = function merge(_object, object) {
                         var newObject = {};
                         var undoChanges = [];
                         var redoChanges = [];
-                        var _props = Object.getOwnPropertyNames(_object);
-                        var props = Object.getOwnPropertyNames(object);
 
-                        [].concat(toConsumableArray(_props), toConsumableArray(props)).forEach(function (prop) {
-                            if (newObject.hasOwnProperty(prop)) return;
-
+                        new Set([].concat(toConsumableArray(getOwnProps(_object)), toConsumableArray(getOwnProps(object)))).forEach(function (prop) {
                             var _entry = _object[prop],
                                 entry = object[prop];
                             if (_object.hasOwnProperty(prop)) {
@@ -3586,7 +3575,7 @@ function processCondition(currentError, condition, index) {
     }
 
     if (!condition.hasOwnProperty('value')) {
-        condition.value = initialValue;
+        condition.value = INITIAL_VALUE;
     }
 
     return condition;
@@ -3658,9 +3647,9 @@ var createStore = function createStore(_ref5) {
     store.register = function (_ref6) {
         var name = _ref6.name,
             _ref6$state = _ref6.state,
-            state = _ref6$state === undefined ? initialValue : _ref6$state,
+            state = _ref6$state === undefined ? INITIAL_VALUE : _ref6$state,
             _ref6$scope = _ref6.scope,
-            scope = _ref6$scope === undefined ? initialValue : _ref6$scope,
+            scope = _ref6$scope === undefined ? INITIAL_VALUE : _ref6$scope,
             _ref6$updaters = _ref6.updaters,
             updaters = _ref6$updaters === undefined ? [] : _ref6$updaters;
 
@@ -3668,8 +3657,8 @@ var createStore = function createStore(_ref5) {
         invariant_1(!epicRegistry[name], error$1('duplicateEpic', name));
 
         epicRegistry[name] = {
-            state: freeze(state === null ? initialValue : state),
-            scope: freeze(scope === null ? initialValue : scope),
+            state: freeze(state === null ? INITIAL_VALUE : state),
+            scope: freeze(scope === null ? INITIAL_VALUE : scope),
             updaters: updaters.map(function (_ref7, index) {
                 var conditions = _ref7.conditions,
                     handler = _ref7.handler;
@@ -3717,13 +3706,13 @@ var createStore = function createStore(_ref5) {
     var getHandlerParams = function getHandlerParams(conditions) {
         return conditions.map(function (condition) {
             var value = condition.hasOwnProperty('_value') ? condition._value : condition.value;
-            if (value === initialValue) {
+            if (value === INITIAL_VALUE) {
                 var epic = epicRegistry[condition.type];
                 if (epic) {
                     value = condition._value = getSelectorValue(condition, epic.state);
                 }
             }
-            return value === initialValue ? undefined : value;
+            return value === INITIAL_VALUE ? undefined : value;
         });
     };
 

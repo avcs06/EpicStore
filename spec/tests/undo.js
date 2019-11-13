@@ -1,6 +1,6 @@
 import { createStore } from '../../src/EpicStore';
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
-import { initialValue } from '../../src/Object';
+import { INITIAL_VALUE } from '../../src/object-utils';
 const EpicStore = createStore({ undo: true, maxUndoStack: 3 });
 
 describe("Undo: ", function () {
@@ -146,7 +146,7 @@ describe("Undo: ", function () {
         expect(EpicStore.getEpicState(epic)).toEqual([1, 2, 3]);
 
         EpicStore.undo();
-        expect(EpicStore.getEpicState(epic)).toEqual(initialValue);
+        expect(EpicStore.getEpicState(epic)).toEqual(INITIAL_VALUE);
 
         EpicStore.redo();
         expect(EpicStore.getEpicState(epic)).toEqual([1, 2, 3]);

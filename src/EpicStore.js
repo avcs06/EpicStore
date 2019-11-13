@@ -3,7 +3,7 @@ import "core-js/es/symbol";
 import memoize from 'memoizee';
 import invariant from 'invariant';
 import { error, makeError } from './Errors';
-import { initialValue, freeze, clone, merge, isEqual, MERGE_ERROR } from './Object';
+import { INITIAL_VALUE, freeze, clone, merge, isEqual, MERGE_ERROR } from './object-utils';
 
 const validateAction = action => freeze(typeof action === 'string' ? { type: action } : action);
 const getSelectorValue = ({ selector }, { type, payload }) => selector(payload, type);
@@ -31,7 +31,7 @@ function processCondition(currentError, condition, index) {
     }
 
     if (!condition.hasOwnProperty('value')) {
-        condition.value = initialValue;
+        condition.value = INITIAL_VALUE;
     }
 
     return condition;
@@ -88,13 +88,13 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
     const UNDO_ACTION = { type: 'STORE_UNDO' };
     const REDO_ACTION = { type: 'STORE_REDO' };
 
-    store.register = function ({ name, state = initialValue, scope = initialValue, updaters = [] }) {
+    store.register = function ({ name, state = INITIAL_VALUE, scope = INITIAL_VALUE, updaters = [] }) {
         let currentError = makeError(name);
         invariant(!epicRegistry[name], error('duplicateEpic', name));
 
         epicRegistry[name] = {
-            state: freeze(state === null ? initialValue : state),
-            scope: freeze(scope === null ? initialValue : scope),
+            state: freeze(state === null ? INITIAL_VALUE : state),
+            scope: freeze(scope === null ? INITIAL_VALUE : scope),
             updaters: updaters.map(({ conditions, handler }, index) => {
                 currentError = currentError(index);
                 conditions = conditions.map(processCondition.bind(null, currentError));
@@ -131,13 +131,13 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
 
     const getHandlerParams = conditions => conditions.map(condition => {
         let value = condition.hasOwnProperty('_value') ? condition._value : condition.value;
-        if (value === initialValue) {
+        if (value === INITIAL_VALUE) {
             const epic = epicRegistry[condition.type];
             if (epic) {
                 value = condition._value = getSelectorValue(condition, epic.state);
             }
         }
-        return value === initialValue ? undefined : value;
+        return value === INITIAL_VALUE ? undefined : value;
     });
 
     const processEpicListeners = (epicCache, sourceAction) => {

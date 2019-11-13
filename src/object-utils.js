@@ -1,62 +1,44 @@
-import memoize from 'memoizee';
+export const MERGE_ERROR = 'MERGE_ERROR';
+export const INITIAL_VALUE = Symbol('____ricochet_initial_value____');
 
 const isArray = entry => entry.constructor === Array;
 const isObject = entry => entry !== null && typeof entry === "object";
-export const initialValue = Symbol('initialValue');
-export const MERGE_ERROR = 'MERGE_ERROR';
+
+const getOwnProps = obj => [
+    ...Object.getOwnPropertyNames(obj),
+    ...(Object.getOwnPropertySymbols ? Object.getOwnPropertySymbols(obj) : [])
+];
+
+const propIt = (obj, method, ...args) => 
+    getOwnProps(obj)[method](...args);
 
 export const freeze = object => {
     if (isObject(object)) {
         Object.freeze(object);
-        if (!isArray(object)) {
-            Object.getOwnPropertyNames(object).forEach(prop => freeze(object[prop]));
-        }
+        propIt(object, 'forEach', prop => freeze(object[prop]));
     }
 
     return object;
 };
 
-export const isEqual = (() => {
-    let internalMemoizedIsEqual;
-    const isEqual = (object1, object2) => {
-        if (object1 !== object2) {
-            const isObject1 = isObject(object1);
-            const isObject2 = isObject(object2);
-            if (isObject1 === isObject2) {
-                if (!isObject1) return false;
-                const props1 = Object.getOwnPropertyNames(object1);
-                const props2 = Object.getOwnPropertyNames(object2);
-                return (
-                    props1.every(
-                        prop => object2.hasOwnProperty(prop) &&
-                        internalMemoizedIsEqual(object1[prop], object2[prop])
-                    ) && props2.every(prop => object1.hasOwnProperty(prop))
-                );
-            }
-            return false;
+export const isEqual = (object1, object2) => {
+    if (object1 !== object2) {
+        if (isObject(object1) && isObject(object2)) {
+            return (
+                propIt(object1, 'every', prop => object2.hasOwnProperty(prop)) &&
+                propIt(object2, 'every', prop => object1.hasOwnProperty(prop) && isEqual(object1[prop], object2[prop]))
+            );
         }
-        return true;
-    };
-
-    return (object1, object2) => {
-        internalMemoizedIsEqual = memoize(isEqual);
-        return internalMemoizedIsEqual(object1, object2);
-    };
-})();
+        return false;
+    }
+    return true;
+};
 
 export const clone = object => {
-    if (object !== initialValue) {
-        if (isObject(object)) {
-            const _isArray = isArray(object);
-            const newObject = _isArray ? [] : {};
-
-            Object.getOwnPropertyNames(object).forEach(function (prop) {
-                if (_isArray && prop === 'length') return;
-                newObject[prop] = clone(object[prop]);
-            });
-
-            return newObject;
-        }
+    if (isObject(object)) {
+        return propIt(object, 'reduce', (a, prop) => {
+            a[prop] = clone(object[prop]); return a;
+        }, isArray(object) ? [] : {});
     }
 
     return object;
@@ -65,8 +47,9 @@ export const clone = object => {
 const makeApplyChanges = changes => state =>
     changes.reduce((a, c) => { c(a); return a; }, state);
 
+// Arrays will be considered as primitives when merging, full replace
 export const merge = (_object, object, ignore = false) => {
-    if (_object !== initialValue) {
+    if (_object !== INITIAL_VALUE) {
         const _isObject = isObject(_object);
         if (isObject(object) === _isObject) {
             if (_isObject) {
@@ -76,12 +59,8 @@ export const merge = (_object, object, ignore = false) => {
                         const newObject = {};
                         const undoChanges = [];
                         const redoChanges = [];
-                        const _props = Object.getOwnPropertyNames(_object);
-                        const props = Object.getOwnPropertyNames(object);
 
-                        [..._props, ...props].forEach(function (prop) {
-                            if (newObject.hasOwnProperty(prop)) return;
-
+                        new Set([...getOwnProps(_object), ...getOwnProps(object)]).forEach(prop => {
                             const _entry = _object[prop], entry = object[prop];
                             if (_object.hasOwnProperty(prop)) {
                                 if (object.hasOwnProperty(prop)) {
