@@ -44,50 +44,75 @@ export const clone = object => {
     return object;
 };
 
-const makeApplyChanges = changes => state =>
-    changes.reduce((a, c) => { c(a); return a; }, state);
-
 // Arrays will be considered as primitives when merging, full replace
-export const merge = (_object, object, ignore = false) => {
-    if (_object !== INITIAL_VALUE) {
-        const _isObject = isObject(_object);
-        if (isObject(object) === _isObject) {
-            if (_isObject) {
-                const _isArray = isArray(_object);
-                if (isArray(object) === _isArray) {
-                    if (!_isArray) {
-                        const newObject = {};
-                        const undoChanges = [];
-                        const redoChanges = [];
+export const merge = (() => {
+    const noop = s => s;
+    const makeSetter = s => () => s;
+    const makeSetProp = (prop, value) => s => s[prop] = value;
+    const makeDeleteProp = prop => s => delete s[prop];
+    const makePropSetter = (prop, setter) => s => s[prop] = setter(s[prop]);
 
-                        new Set([...getOwnProps(_object), ...getOwnProps(object)]).forEach(prop => {
-                            const _entry = _object[prop], entry = object[prop];
-                            if (_object.hasOwnProperty(prop)) {
-                                if (object.hasOwnProperty(prop)) {
-                                    const [updatedValue, undoChange, redoChange] = merge(_entry, entry, true);
-                                    newObject[prop] = updatedValue;
-                                    undoChanges.push(s => s[prop] = undoChange(s[prop]));
-                                    redoChanges.push(s => s[prop] = redoChange(s[prop]));
+    const defaultChanges = { undo: noop, redo: noop };
+    const makeApplyChanges = changes => s =>
+        changes.reduce((a, c) => { c(a); return a; }, s);
+
+    return (_object, object, withUndo, internal = false) => {
+        let changes = !internal && defaultChanges;
+        if (_object !== INITIAL_VALUE) {
+            const _isObject = isObject(_object);
+            if (isObject(object) === _isObject) {
+                if (_isObject) {
+                    const _isArray = isArray(_object);
+                    if (isArray(object) === _isArray) {
+                        if (!_isArray) {
+                            const newObject = {};
+                            const undoChanges = [];
+                            const redoChanges = [];
+
+                            new Set([...getOwnProps(_object), ...getOwnProps(object)]).forEach(prop => {
+                                const _entry = _object[prop], entry = object[prop];
+                                if (_object.hasOwnProperty(prop)) {
+                                    if (object.hasOwnProperty(prop)) {
+                                        const [updatedValue, changes] = merge(_entry, entry, withUndo, true);
+                                        newObject[prop] = updatedValue;
+                                        if (changes) {
+                                            const { undo, redo } = changes;
+                                            undoChanges.push(makePropSetter(prop, undo));
+                                            redoChanges.push(makePropSetter(prop, redo));
+                                        }
+                                    } else {
+                                        newObject[prop] = _entry;
+                                    }
                                 } else {
-                                    newObject[prop] = _entry;
+                                    newObject[prop] = entry;
+                                    undoChanges.push(makeDeleteProp(prop));
+                                    redoChanges.push(makeSetProp(prop, entry));
                                 }
-                            } else {
-                                newObject[prop] = entry;
-                                undoChanges.push(s => delete s[prop]);
-                                redoChanges.push(s => s[prop] = entry);
-                            }
-                        });
+                            });
 
-                        return [newObject, makeApplyChanges(undoChanges), makeApplyChanges(redoChanges)];
+                            if (withUndo && undoChanges.length)
+                                changes = {
+                                    undo: makeApplyChanges(undoChanges),
+                                    redo: makeApplyChanges(redoChanges)
+                                };
+
+                            return [newObject, changes];
+                        }
+                    } else if (!internal) {
+                        throw MERGE_ERROR;
                     }
-                } else if (!ignore) {
-                    throw MERGE_ERROR;
                 }
+            } else if (!(_isObject ? isArray(_object) : isArray(object)) && !internal) {
+                throw MERGE_ERROR;
             }
-        } else if (!(_isObject ? isArray(_object) : isArray(object)) && !ignore) {
-            throw MERGE_ERROR;
         }
-    }
 
-    return [object, () => _object, () => object];
-};
+        if (withUndo && _object !== object)
+            changes = {
+                undo: makeSetter(_object),
+                redo: makeSetter(object)
+            };
+
+        return [object, changes];
+    };
+})();

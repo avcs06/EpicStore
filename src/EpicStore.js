@@ -248,18 +248,19 @@ export const createStore = ({ debug = false, patterns = false, undo = false, max
 
             const handleUpdate = (entity, callback = Function.prototype) => {
                 if (handlerUpdate.hasOwnProperty(entity)) {
-                    let updatedEntity, undoChange, redoChange;
+                    let updatedValue, changes;
                     try {
-                        [updatedEntity, undoChange, redoChange] =
-                            merge(clone(epic['_' + entity]), handlerUpdate[entity]);
+                        [updatedValue, changes] =
+                            merge(clone(epic['_' + entity]), handlerUpdate[entity], undo);
                     } catch (e) {
                         invariant(e !== MERGE_ERROR,
                             error('invalidHandlerUpdate', epicName, index));
                         throw e;
                     }
 
-                    epic['_' + entity] = freeze(updatedEntity);
+                    epic['_' + entity] = freeze(updatedValue);
                     if (undo) {
+                        const { undo: undoChange, redo: redoChange } = changes;
                         undoEntry[epicName] = {
                             ...(undoEntry[epicName] || {}),
                             [entity]: { undo: undoChange, redo: redoChange }

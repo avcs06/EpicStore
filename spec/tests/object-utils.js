@@ -1,11 +1,11 @@
 import * as ObjectUtils from '../../src/object-utils';
 
 function verifyMerge(a, b, isObject) {
-  const [updatedEntity, undoChange, redoChange] = ObjectUtils.merge(a, b);
+  const [updatedEntity, { undo, redo }] = ObjectUtils.merge(a, b, true);
   const expectedUpdatedEntity = isObject ? { ...a, ...b } : b;
   expect(updatedEntity).toEqual(expectedUpdatedEntity);
-  expect(undoChange(updatedEntity)).toEqual(a);
-  expect(redoChange(undoChange(updatedEntity))).toEqual(expectedUpdatedEntity);
+  expect(undo(updatedEntity)).toEqual(a);
+  expect(redo(undo(updatedEntity))).toEqual(expectedUpdatedEntity);
 }
 
 describe("Object Utilities: Merge", function () {
@@ -70,6 +70,10 @@ describe("Object Utilities: Merge", function () {
 
   it("Deep Object to Array", function () {
     verifyMerge({ a: 1, b: { a: 2 } }, { a: 1, b: [1, 2] }, true);
+  });
+
+  it("Object with no change", function () {
+    verifyMerge({ a: 1, b: 1 }, { a: 1, b:1 }, true);
   });
 
   // Cyclic Object
