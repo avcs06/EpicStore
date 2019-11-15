@@ -1,38 +1,38 @@
-import nodeResolve from 'rollup-plugin-node-resolve';
 import commonjs from 'rollup-plugin-commonjs';
+import resolve from 'rollup-plugin-node-resolve';
 import babel from 'rollup-plugin-babel';
-import uglify from 'rollup-plugin-uglify';
 
-var env = process.env.NODE_ENV
-var config = {
-    format: 'umd',
-    moduleName: 'EpicStore',
+const extensions = ['.js', '.ts'];
+export default {
+    input: {
+        'Action': 'src/Action.ts',
+        'Condition': 'src/Condition.ts',
+        'Updater': 'src/Updater.ts',
+        'Store': 'src/Store.ts',
+    },
+
+    // Specify here external modules which you don't want to include in your bundle (for instance: 'lodash', 'moment' etc.)
+    // https://rollupjs.org/guide/en#external-e-external
+    external: ['memoizee', 'invariant', 'core-js/es/symbol'],
+
     plugins: [
-        nodeResolve({
-            jsnext: true
-        }),
-        // due to https://github.com/rollup/rollup/wiki/Troubleshooting#name-is-not-exported-by-module
-        commonjs({
-            include: 'node_modules/**'
-        }),
-        babel({
-            exclude: 'node_modules/**',
-            "plugins": ["external-helpers"]
-        })
-    ]
-}
+        // Allows node_modules resolution
+        resolve({ extensions }),
 
-if (env === 'production') {
-    config.plugins.push(
-        uglify({
-            compress: {
-                pure_getters: true,
-                unsafe: true,
-                unsafe_comps: true,
-                warnings: false
-            }
-        })
-    )
-}
+        // Allow bundling cjs modules. Rollup doesn't understand cjs
+        commonjs(),
 
-export default config
+        // Compile TypeScript/JavaScript files
+        babel({ extensions, include: ['src/**/*'] }),
+    ],
+
+    output: [{
+        dir: 'lib',
+        format: 'cjs',
+        exports: 'named'
+    }, {
+        dir: 'es',
+        format: 'es',
+        exports: 'named'
+    }],
+};

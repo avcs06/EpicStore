@@ -1,16 +1,10 @@
 {
-    "env": {
-        "commonjs": {
-            "presets": [
-                [ "env", { "useBuiltIns": false } ]
-            ],
-            "plugins": ["transform-object-rest-spread"]
-        },
-        "es": {
-            "presets": [
-                [ "env", { "useBuiltIns": false, "modules": false } ]
-            ],
-            "plugins": ["transform-object-rest-spread"]
-        }
-    }
+    "presets": [
+        "@babel/env",
+        "@babel/typescript"
+    ],
+    "plugins": [
+        "@babel/plugin-proposal-object-rest-spread",
+        "@babel/plugin-proposal-class-properties"
+    ]
 }
