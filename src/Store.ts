@@ -2,7 +2,7 @@ import "core-js/es/symbol";
 
 import memoize from 'memoizee';
 import invariant from 'invariant';
-import { error, makeError } from './Errors';
+import { error, makeError } from './errors';
 import { INITIAL_VALUE, freeze, clone, merge, isEqual, MERGE_ERROR } from './object-utils';
 
 const validateAction = action => freeze(typeof action === 'string' ? { type: action } : action);

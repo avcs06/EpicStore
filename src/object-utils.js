@@ -1,8 +1,8 @@
 export const MERGE_ERROR = 'MERGE_ERROR';
 export const INITIAL_VALUE = Symbol('____ricochet_initial_value____');
 
-const isArray = entry => entry.constructor === Array;
-const isObject = entry => entry !== null && typeof entry === "object";
+export const isArray = entry => entry.constructor === Array;
+export const isObject = entry => entry !== null && typeof entry === "object";
 
 const getOwnProps = obj => [
     ...Object.getOwnPropertyNames(obj),

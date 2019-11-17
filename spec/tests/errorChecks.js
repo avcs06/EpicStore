@@ -1,5 +1,5 @@
 import { createStore } from '../../src/EpicStore';
-import { error } from '../../src/Errors';
+import { error } from '../../src/errors';
 import Updater from '../../src/Updater';
 import Epic from '../../src/Epic';
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
