@@ -1,63 +1,38 @@
 import { Epic } from './Epic';
-import { INITIAL_VALUE } from './object-utils';
+import { isArray } from './object-utils';
+
 type InputType = string | Epic;
+type EpicConditionArgs = [(Function | boolean)?, boolean?, boolean?];
+type UserConditionArgs = [(Function | boolean | EpicConditionArgs)?, boolean?];
 
-interface ConditionOptions {
-    required?: boolean;
-}
-
-class Condition {
+export class UserCondition {
     type: InputType;
     selector?: Function = s => s;
     required?: boolean;
 
-    constructor(type: InputType, args: [Function | ConditionOptions, ConditionOptions?]) {
+    constructor(type: InputType, ...args: UserConditionArgs) {
         this.type = type;
 
-        if (typeof args[0] === 'function')
-            this.selector = args.shift() as Function;
+        const kArgs = isArray(args[0]) ? args[0] as EpicConditionArgs : args;
+        if (typeof kArgs[0] === 'function')
+            this.selector = kArgs.shift() as Function;
 
-        this.required = Boolean((args[0] as ConditionOptions)?.required);
+        this.required = Boolean(kArgs.shift());
     }
 }
 
-interface EpicConditionOptions extends ConditionOptions{
-    passive?: boolean;
-}
-
-export class EpicCondition extends Condition {
+export class EpicCondition extends UserCondition {
     passive?: boolean;
 
-    constructor(type: InputType, options?: EpicConditionOptions)
-    constructor(type: InputType, selector?: Function, options?: EpicConditionOptions)
-    constructor(type: InputType, ...args: [Function | EpicConditionOptions, EpicConditionOptions?]) {
+    constructor(type: InputType, ...args: EpicConditionArgs) {
         super(type, args);
-        this.passive = Boolean((args[0] as EpicConditionOptions)?.passive);
+        this.passive = Boolean(args[0]);
     }
 }
 
-interface UserConditionOptions extends ConditionOptions {
-    value?: any;
-}
-
-export class UserCondition extends Condition {
-    value?: any;
-
-    constructor(type: InputType, options?: UserConditionOptions)
-    constructor(type: InputType, selector?: Function, options?: UserConditionOptions)
-    constructor(type: InputType, ...args: [Function | UserConditionOptions, UserConditionOptions?]) {
-        super(type, args);
-        const { value = INITIAL_VALUE } = (args[0] || {}) as UserConditionOptions;
-        this.value = value;
-    }
-}
-
-// Helpers to make small changes to exisitng conditions, should return new condition
+// Helpers to make changes to exisitng conditions, should return new condition
 export type AnyCondition = EpicCondition | UserCondition;
 export type InputCondition = InputType | AnyCondition;
-
-type InputUserCondition = InputType | UserCondition;
-type InputEpicCondition = InputType | EpicCondition;
 
 const getCondition = (condition: InputCondition): AnyCondition =>
     (typeof condition === 'string' || condition instanceof Epic) ?
@@ -66,14 +41,11 @@ const getCondition = (condition: InputCondition): AnyCondition =>
 const updateCondition = (condition: InputCondition, change: Object): AnyCondition =>
     Object.assign(getCondition(condition), change);
 
-export const passive = (condition: InputEpicCondition): EpicCondition =>
+export const passive = (condition: InputCondition): EpicCondition =>
     updateCondition(condition, { passive: true });
 
 export const required = (condition: InputCondition): AnyCondition =>
     updateCondition(condition, { required: true });
-
-export const withValue = (condition: InputUserCondition, value: any): UserCondition =>
-    updateCondition(condition, { value });
 
 export const withSelector = (condition: InputCondition, selector: Function): AnyCondition =>
     updateCondition(condition, { selector });

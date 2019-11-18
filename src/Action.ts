@@ -8,7 +8,7 @@ interface ActionOptions {
 export class Action {
     type: string;
     payload?: any;
-    target?: ActionOptions["target"];
+    target?: string | Epic;
     createUndoPoint?: boolean;
 
     constructor(type: string, payload?: any, options?: ActionOptions) {

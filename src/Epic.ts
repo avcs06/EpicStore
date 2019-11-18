@@ -22,8 +22,8 @@ export class Epic {
     name: string;
     state: any;
     scope: any;
-    private _updaters: Updater[] = [];
 
+    private _updaters: Updater[] = [];
     get updaters() {
         return this._updaters;
     }
@@ -49,8 +49,6 @@ export class Epic {
                 inputConditions = indexedKeys.map(key => condition[key]);
             }
         } else {
-            delete (condition as AnyOfCondition).__ricochet_anyOf;
-
             isSoloFormat = true;
             inputConditions = [condition as InputCondition];
         }
