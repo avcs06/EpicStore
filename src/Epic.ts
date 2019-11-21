@@ -1,6 +1,6 @@
 import { Action } from './Action';
-import { AnyOfCondition, ResolvableCondition, InputCondition } from './Condition';
-import { INITIAL_VALUE, isArray, freeze } from './object-utils';
+import { ResolvableCondition, InputCondition } from './Condition';
+import { INITIAL_VALUE, isArray, freeze } from './object';
 
 interface EpicHandlerResponse {
     state?: any;
@@ -12,8 +12,9 @@ interface EpicHandler {
     (values: any): EpicHandlerResponse
 }
 
-interface Updater {
-    name: string;
+export interface Updater {
+    epic: string;
+    name: string | number;
     handler: EpicHandler;
     conditions: InputCondition[];
 }
@@ -34,7 +35,7 @@ export class Epic {
         this.scope = freeze(scope === null ? INITIAL_VALUE : scope);
     }
 
-    on(condition: InputCondition | AnyOfCondition | ResolvableCondition, handler: EpicHandler) {
+    on(condition: InputCondition | ResolvableCondition, handler: EpicHandler) {
         let isObjectFormat = false, isArrayFormat = false, isSoloFormat = false;
         let indexedKeys = [], inputConditions;
 
@@ -54,7 +55,8 @@ export class Epic {
         }
 
         this._updaters.push({
-            name: handler.name,
+            epic: this.name,
+            name: handler.name || this._updaters.length,
             conditions: inputConditions,
             handler: (values, ...args) => {
                 let outputValues;

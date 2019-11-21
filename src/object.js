@@ -1,3 +1,5 @@
+import "core-js/es/symbol";
+
 export const MERGE_ERROR = 'MERGE_ERROR';
 export const INITIAL_VALUE = Symbol('____ricochet_initial_value____');
 

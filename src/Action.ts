@@ -1,14 +1,14 @@
-import { Epic } from './Epic';
+import { EpicLike } from './types';
 
 interface ActionOptions {
     createUndoPoint?: boolean,
-    target?: string | Epic
+    target?: string | EpicLike
 }
 
 export class Action {
     type: string;
     payload?: any;
-    target?: string | Epic;
+    target?: string | EpicLike;
     createUndoPoint?: boolean;
 
     constructor(type: string, payload?: any, options?: ActionOptions) {
@@ -21,14 +21,14 @@ export class Action {
 
 type InputAction = string | Action;
 
-const getAction = (action: InputAction): Action =>
-    typeof action === 'object' ? action : { type: action };
+export const getActionFrom = (action: InputAction): Action =>
+    typeof action === 'string' ? { type: action } : { ...action };
 
 export const withPayload = (action: InputAction, payload: any): Action =>
-    Object.assign(getAction(action), { payload });
+    Object.assign(getActionFrom(action), { payload });
 
-export const withTarget = (action: InputAction, target: string | Epic): Action =>
-    Object.assign(getAction(action), { target });
+export const withTarget = (action: InputAction, target: string | EpicLike): Action =>
+    Object.assign(getActionFrom(action), { target });
 
 export const withUndoPoint = (action: InputAction): Action =>
-    Object.assign(getAction(action), { createUndoPoint: true });
+    Object.assign(getActionFrom(action), { createUndoPoint: true });

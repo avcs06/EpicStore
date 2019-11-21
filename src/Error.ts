@@ -1,6 +1,4 @@
-export const Errors = {
-    invalidConditionType: 'Epic: [0], Updater: [1], Condition: [2] -> Invalid Type: Condition.type should be of type string',
-    invalidConditionSelector: 'Epic: [0], Updater: [1], Condition: [2] -> Invalid Type: Condition.selector (if provided) should be of type function',
+export const ErrorMessages = {
     duplicateEpic: 'Epic: [0] -> Epic with same name is already registered',
     noPassiveUpdaters: 'Epic: [0], Updater: [1] -> Updaters should have atleast one non passive condition',
     noDispatchInEpicListener: 'Epic listeners should not dispatch actions',
@@ -9,5 +7,18 @@ export const Errors = {
     noRepeatedExternalAction: 'An external action of type: [0] has already been dispatched during the current Epic Cycle'
 };
 
-export const error = (error, ...args) => args.reduce((a, c, i) => a.replace('[' + i + ']', c), Errors[error]);
-export const makeError = epic => updater => condition => errorType => error(errorType, epic, updater, condition);
+export class Error {
+    epic?: string;
+    updater?: string | number;
+    condition?: string | number;
+
+    constructor(epic, updater?, condition?) {
+        this.epic = epic;
+        this.updater = updater;
+        this.condition = condition;
+    }
+
+    throw(error) {
+        return [this.epic, this.updater, this.condition].reduce((a, c, i) => a.replace('[' + i + ']', c), error);
+    }
+};
