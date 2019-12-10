@@ -3,29 +3,46 @@ import invariant from 'invariant';
 import { Error, ErrorMessages } from './Error';
 import { INITIAL_VALUE, MERGE_ERROR, freeze, clone, merge, isEqual, isArray } from './object';
 
-import { Epic, Updater } from './Epic';
-import { getConditionFrom, AnyOfCondition, Condition, anyOf, SingletonInputCondition } from './Condition';
-import { Action, getActionFrom } from './Action';
+import { Epic } from './Epic';
+import { Updater, makeUpdater, EpicHandler } from './Updater';
+import { getConditionFrom, AnyOfCondition, Condition, ResolvableCondition, resolve, AnyCondition, SingleCondition } from './Condition';
+import { Action, InputAction, getActionFrom } from './Action';
 
-const processAction = action => {
-    action = getActionFrom(action);
-    const { target } = action;
-    if (target)
-        action.target = typeof target === 'string' ? target : target.name;
-    return action;
+interface InternalAction extends Action {
+    isPattern?: boolean;
 }
 
-const processCondition = (condition): Condition => {
-    condition = getConditionFrom(condition);
+const processAction = ($0: InputAction): InternalAction => {
+    const action = getActionFrom($0) as InternalAction;
+    const { target } = action;
+    if (target) {
+        action.target = typeof target === 'string' ? target : target.name;
+        action.isPattern = /\*/.test(action.target);
+    }
+
+    return action;
+};
+
+interface InternalCondition extends Condition {
+    value?: any;
+    _value?: any;
+    isPattern?: boolean;
+    alwaysFulfilledWith?: Function;
+    fulfilledBy?: { [key: string]: any }
+}
+
+const processCondition = ($0: SingleCondition): InternalCondition => {
+    const condition = getConditionFrom($0) as InternalCondition;
 
     if (condition.selector)
         condition.selector = memoize(condition.selector, { max: 1 });
 
+    condition.isPattern = /\*/.test(condition.type)
     condition.value = INITIAL_VALUE;
     return condition;
-}
+};
 
-const getSelectorValue = ({ selector }, { type, payload }) =>
+const getSelectorValue = ({ selector }: Condition, { type, payload }: Action) =>
     selector ? selector(payload, type) : payload;
 
 const getRegexFromPattern = pattern =>
@@ -50,7 +67,7 @@ const resetOrUpdateCondition = function (condition, shouldUpdate) {
     }
 
     delete condition._value;
-    delete condition.matchedPattern;
+    delete condition.fulfilledBy;
 };
 
 const splitNestedValues = ([...values]) => {
@@ -69,6 +86,16 @@ const splitNestedValues = ([...values]) => {
     return valuesList.length ? valuesList : [values];
 };
 
+function alwaysFulfilledWith(epicRegistry) {
+    if (this.value === INITIAL_VALUE && epicRegistry[this.type])
+        this.value = getSelectorValue(this, {
+            type: this.type,
+            payload: epicRegistry[this.type].state
+        });
+
+    return this.value === INITIAL_VALUE ? undefined : this.value;
+}
+
 const UNDO_ACTION = { type: 'STORE_UNDO' };
 const REDO_ACTION = { type: 'STORE_REDO' };
 
@@ -82,160 +109,182 @@ interface StoreParams {
     undo?: boolean | UndoParams
 }
 
-export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
-    const undoEnabled = Boolean(undo);
-    const debugEnabled = Boolean(debug);
-    const patternsEnabled = Boolean(patterns);
-    const undoMaxStack = (undo as UndoParams)?.maxStack || 10
+interface InternalEpic extends Epic {
 
-    const store: any = {};
-    const epicRegistry = {};
+}
 
-    const updaterRegistry = {};
-    const patternRegistry = {};
+interface InternalUpdater extends Updater {
+    processed?: boolean
+}
 
-    const epicListeners = {};
-    const patternListeners = {};
+type UpdaterList = [InternalUpdater, number][];
 
-    let undoStack = [];
-    let redoStack = [];
+class Store {
+    private undoEnabled = false;
+    private debugEnabled = false;
+    private patternsEnabled = false;
+    private undoMaxStack = 10;
 
-    function alwaysFulfilledWith() {
-        if (this.value === INITIAL_VALUE && epicRegistry[this.type])
-            return getSelectorValue(this, {
-                type: this.type,
-                payload: epicRegistry[this.type].state
-            });
+    private epicRegistry: { [key: string]: InternalEpic } = {};
+    private updaterRegistry: { [key: string]: UpdaterList } = {};
+    private pUpdaterRegistry: { [key: string]: UpdaterList } = {};
 
-        return this.value === INITIAL_VALUE ? undefined : this.value;
+    private storeListeners: { [key: string]: UpdaterList } = {};
+    private pStoreListeners: { [key: string]: UpdaterList } = {};
+
+    private undoStack: Function[] = [];
+    private redoStack: Function[] = [];
+
+    constructor(options: StoreParams) {
+        this.undoEnabled = Boolean(options.undo);
+        this.debugEnabled = Boolean(options.debug);
+        this.patternsEnabled = Boolean(options.patterns);
+        this.undoMaxStack = (options?.undo as UndoParams)?.maxStack || 10;
     }
 
-    store.register = function register(epic: Epic) {
-        const { name, updaters } = epic;
+    register(epic: InternalEpic) {
+        const { name, _updaters: updaters } = epic;
         const error = new Error(name);
-
-        invariant(!epicRegistry[name],
+        invariant(!this.epicRegistry[name],
             error.throw(ErrorMessages.duplicateEpic));
 
-        updaters.forEach(updater => {
-            const { conditions, name } = updater;
-            error.updater = name;
-            (epic as any)._conditions = {};
+        updaters.forEach(this._addUpdater.bind(this));
+        this.epicRegistry[name] = epic;
+        epic._addStore(this);
+    }
 
-            invariant(conditions.some((c: any) => !c.passive),
-                error.throw(ErrorMessages.noPassiveUpdaters));
-
-            updater.conditions = conditions.map(
-                (function eachCondition(isAnyOf, condition, i) {
-                    if (isArray(condition)) {
-                        return (condition as AnyOfCondition).map(condition => {
-                            return eachCondition(true, condition, i);
-                        }) as AnyOfCondition;
-                    }
-
-                    condition = processCondition(condition);
-                    const { type } = condition as Condition;
-
-                    let registry = updaterRegistry;
-                    if (patternsEnabled && /\*/.test(type)) {
-                        registry = patternRegistry;
-                        condition.isPattern = true;
-                    }
-
-                    if (!registry[type])
-                        registry[type] = [];
-
-                    (epic as any)._conditions[type] = true;
-                    registry[type].push([updater, i]);
-
-                    if (!isAnyOf && !condition.isPattern && (condition.passive || !condition.required))
-                        condition.alwaysFulfilledWith = alwaysFulfilledWith;
-
-                    return condition;
-                }).bind(null, false)
-            );
-        });
-
-        (epic as any)._conditions = Object.keys((epic as any)._conditions);
-        epicRegistry[name] = epic;
-    };
-
-    store.unregister = function unregister(epic: string | Epic) {
+    unregister(epic: string | Epic) {
         const epicName = (epic as Epic).name || (epic as string);
-        const epicObject = this.epicRegistry[epicName];
+        const epicObject = this.epicRegistry[epicName] as InternalEpic;
 
         if (epicObject) {
             delete this.epicRegistry[epicName];
-            [this.updaterRegistry, this.patternRegistry].forEach(registry => {
-                epicObject._conditions.forEach(condition => {
-                    registry[condition] &&
-                        (registry[condition] =
-                            registry[condition].filter(({ epic }) => epic !== epicName));
+
+            const completed = {};
+            epicObject._updaters.forEach(({ conditions }) => {
+                conditions.forEach(({ type }: InternalCondition) => {
+                    [this.updaterRegistry, this.pUpdaterRegistry].forEach(registry => {
+                        if (registry[type] && !completed[type]) {
+                            completed[type] = true;
+                            registry[type] = registry[type].filter(([{ epic }]) => epic !== epicName);
+                        }
+                    });
                 });
             });
         }
-    };
+    }
 
-    const processEpicListeners = (epicCache, sourceAction) => {
-        const epicListenerCache = [];
+    _addUpdater(updater: Updater) {
+        const { conditions, name, epic: epicName } = updater;
+        const error = new Error(epicName, name);
+
+        // validate conditions
+        invariant(conditions.some((c: AnyCondition) => {
+            if (isArray(c))
+                invariant((c as AnyOfCondition).every((c1: Condition) => (
+                    !c1.readonly && (c1.type || c1) !== '*'
+                )), error.throw(ErrorMessages.invalidAnyOf));
+
+            return !(c as Condition).readonly;
+        }), error.throw(ErrorMessages.noReadonlyUpdaters));
+
+        // register conditions
+        updater.conditions = conditions.map((inputCondition: AnyCondition, i) => {
+            return this._processUpdaterCondition(inputCondition, i, false,
+                ({ type, isPattern }: InternalCondition) => {
+                    let registry = this.updaterRegistry;
+                    if (this.patternsEnabled && isPattern)
+                        registry = this.pUpdaterRegistry;
+
+                    if (!registry[type]) registry[type] = [];
+                    registry[type].push([updater, i]);
+                });
+        });
+    }
+
+    _removeUpdater(updater: Updater) {
+        [this.updaterRegistry, this.pUpdaterRegistry].forEach(registry => {
+            updater.conditions.forEach(({ type }: InternalCondition) => {
+                registry[type] &&
+                    (registry[type] =
+                        registry[type].filter(([u]) => updater !== u));
+            });
+        });
+    }
+
+    private _processUpdaterCondition(inputCondition: AnyCondition, i: number, isAnyOf: boolean, callback: Function) {
+        if (isArray(inputCondition)) {
+            return (inputCondition as AnyOfCondition).map((c: AnyCondition) => {
+                return this._processUpdaterCondition(c, i, true, callback);
+            }) as AnyOfCondition;
+        }
+
+        const condition = processCondition(inputCondition as SingleCondition);
+        if (!isAnyOf && !condition.isPattern && condition.readonly)
+            condition.alwaysFulfilledWith =
+                alwaysFulfilledWith.bind(condition, this.epicRegistry);
+
+        callback.bind(this)(condition);
+        return condition;
+    }
+
+    private _processStoreListeners(epicCache, sourceAction) {
+        const storeListenerCache = [];
         const postProcessingErrors = [];
         const updatedEpics = Object.keys(epicCache);
+
         updatedEpics.forEach(epicName => {
-            const listeners = epicListeners[epicName] || [];
-            if (patternsEnabled) {
-                Object.keys(patternListeners).forEach(key => {
+            const listeners = this.storeListeners[epicName] || [];
+            if (this.patternsEnabled) {
+                Object.keys(this.pStoreListeners).forEach(key => {
                     if (getRegexFromPattern(key).test(epicName))
-                        listeners.push(...patternListeners[key]);
+                        listeners.push(...this.pStoreListeners[key]);
                 });
             }
 
-            listeners.forEach(listener => {
+            listeners.forEach(([listener]) => {
                 if (listener.processed) return;
                 listener.processed = true;
-                epicListenerCache.push(listener);
+                storeListenerCache.push(listener);
 
-                let hasRequired = false;
                 let hasChangedActive = false;
-                let hasUnchangedRequired = false;
                 const { conditions, handler } = listener;
 
-                conditions.forEach(condition => {
-                    const { type, passive, required } = condition;
-                    if (patternsEnabled && /\*/.test(type)) {
+                conditions.forEach((condition: InternalCondition) => {
+                    const { type, isPattern } = condition;
+
+                    if (this.patternsEnabled && isPattern) {
                         const regex = getRegexFromPattern(type);
-                        if (updatedEpics.some(key => regex.test(key))) {
-                            if (required) {
-                                hasRequired = true;
-                            } else if (!passive) {
-                                hasChangedActive = true;
+                        updatedEpics.forEach(key => {
+                            if (regex.test(key)) {
+                                if (!condition.fulfilledBy)
+                                    condition.fulfilledBy = {};
+
+                                condition.fulfilledBy[key] = getSelectorValue(condition, {
+                                    type: key,
+                                    payload: epicCache[key]
+                                });
                             }
-                        } else if (required) {
-                            hasRequired = true;
-                            hasUnchangedRequired = true;
-                        }
+                        });
+
+                        hasChangedActive = Boolean(condition.fulfilledBy);
                     } else if (epicCache[type]) {
                         const payload = epicCache[type];
                         condition._value = getSelectorValue(condition, { type, payload });
-
-                        if (required) {
-                            hasRequired = true;
-                            if (!didConditionChange(condition)) {
-                                hasUnchangedRequired = true;
-                            }
-                        } else if (!passive && didConditionChange(condition)) {
-                            hasChangedActive = true;
-                        }
-                    } else if (required) {
-                        hasRequired = true;
-                        hasUnchangedRequired = true;
+                        hasChangedActive = didConditionChange(condition);
                     }
                 });
 
-                // If there are required conditions all of them should change,
-                // else at least one active condition should change
-                if (hasRequired ? !hasUnchangedRequired : hasChangedActive) {
+                // If there are required conditions all of them should change
+                if (hasChangedActive) {
+                    const handlerParams = conditions.map((c: InternalCondition) =>
+                        c.isPattern ? c.fulfilledBy :
+                            c.hasOwnProperty('_value') ? c._value :
+                                alwaysFulfilledWith.bind(c)()
+                    );
+
                     try {
-                        handler(getHandlerParams(conditions), { sourceAction });
+                        handler(handlerParams, { sourceAction });
                     } catch (e) {
                         postProcessingErrors.push(e);
                     }
@@ -243,24 +292,25 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
             });
         });
 
-        epicListenerCache.forEach(listener => {
+        storeListenerCache.forEach(listener => {
             listener.conditions.forEach(resetOrUpdateCondition.bind(null, true));
             delete listener.processed;
         });
 
         return postProcessingErrors;
-    };
+    }
 
-    store.dispatch = (() => {
+    dispatch = (() => {
         let sourceAction, epicCache, actionCache, conditionCache, inCycle, afterCycle, undoEntry;
 
-        const processUpdater = function (updater, action, pattern?) {
+        function processUpdater(updater, action, pattern?) {
+            const shouldCreateUndoPoint = this.undoEnabled && action.createUndoPoint;
             const [{ epic: epicName, conditions, handler }, conditionIndex] = updater;
 
             // If action target doesn't match the epicName return
             if (action.target && action.target !== epicName) return;
-
             const originalCondition = conditions[conditionIndex];
+
             let sendFullAction = Boolean(pattern);
             let activeCondition = originalCondition;
             if (isArray(activeCondition)) {
@@ -269,16 +319,18 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
                 activeCondition = activeCondition.find(({ type }) => conditionType === type);
             }
 
-            conditionCache.push(activeCondition);
             const conditionValue = getSelectorValue(activeCondition, action);
-
             // pattern conditions cannot have value as prev match and current match can be completely different epics
-            if (!pattern)
+            if (!pattern) {
+                conditionCache.push(activeCondition);
                 activeCondition._value = conditionValue;
+            }
 
             // Should always update the epic on pattern or external action
             // If this is an epic action, current epic should be updated only if value is changed
             if (pattern || external || didConditionChange(activeCondition)) {
+                conditionCache.push(originalCondition);
+
                 if (!originalCondition.fulfilledBy)
                     originalCondition.fulfilledBy = {};
 
@@ -294,7 +346,7 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
                 !conditions.some(c => !c.passive && c.fulfilledBy)) return;
 
             // All conditions should either be always fulfilled or fulfilled in the cycle
-            if (!conditions.every(condition => 
+            if (!conditions.every(condition =>
                 condition.fulfilledBy || condition.alwaysFulfilledWith)) return;
 
             const handlerParams = conditions.map(c => {
@@ -304,10 +356,11 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
                     return c.alwaysFulfilledWith();
             });
 
-            const epic = epicRegistry[epicName];
+            const epic = this.epicRegistry[epicName];
             epic._state = epic.hasOwnProperty('_state') ? epic._state : epic.state;
             epic._scope = epic.hasOwnProperty('_scope') ? epic._scope : epic.scope;
 
+            let stateUpdated = false;
             splitNestedValues(handlerParams).forEach(handlerParams => {
                 const handlerUpdate = handler(handlerParams, sourceAction);
                 const handleUpdate = (entity, callback = Function.prototype) => {
@@ -315,7 +368,7 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
                         let updatedValue, changes;
                         try {
                             [updatedValue, changes] =
-                                merge(clone(epic['_' + entity]), handlerUpdate[entity], undoEnabled);
+                                merge(clone(epic['_' + entity]), handlerUpdate[entity], shouldCreateUndoPoint);
                         } catch (e) {
                             invariant(e !== MERGE_ERROR,
                                 new Error(epicName, name).throw(ErrorMessages.invalidHandlerUpdate));
@@ -323,7 +376,7 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
                         }
 
                         epic['_' + entity] = freeze(updatedValue);
-                        if (undoEnabled) {
+                        if (shouldCreateUndoPoint) {
                             const { undo: undoChange, redo: redoChange } = changes;
                             undoEntry[epicName] = {
                                 ...(undoEntry[epicName] || {}),
@@ -338,22 +391,24 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
                 handleUpdate('scope');
                 handleUpdate('state', () => {
                     epicCache[epicName] = epic._state;
-                    if (!forcePassiveUpdate && !handlerUpdate.passive) {
-                        executeAction({ type: epicName, payload: epic._state }, false);
+                    if (pattern !== '*' && !handlerUpdate.passive) {
+                        stateUpdated = true;
                     }
                 });
-
-                if (handlerUpdate.hasOwnProperty('actions')) {
-                    handlerUpdate.actions.forEach(
-                        action => executeAction(processAction(action), true));
-                }
             });
-        };
 
-        const executeAction = (action, external) => {
+            if (stateUpdated) {
+                const epicAction = new Action(epicName, epic._state, {
+                    createUndoPoint: shouldCreateUndoPoint
+                });
+                executeAction.bind(this)(epicAction, false);
+            }
+        }
+
+        function executeAction(action, external) {
             if (external) {
                 // throw if epic is triggered as an external action
-                invariant(!epicRegistry[action.type],
+                invariant(!this.epicRegistry[action.type],
                     new Error(action.type).throw(ErrorMessages.invalidEpicAction));
 
                 // throw if repeated external action in same cycle
@@ -364,29 +419,28 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
             }
 
             // handle direct updaters
-            (updaterRegistry[action.type] || []).forEach(updater => {
-                processUpdater(updater, action);
+            (this.updaterRegistry[action.type] || []).forEach(updater => {
+                processUpdater.bind(this)(updater, action);
             });
 
             // handle pattern updaters
-            if (patternsEnabled) {
-                Object.keys(patternRegistry).forEach(key => {
+            if (this.patternsEnabled) {
+                Object.keys(this.pUpdaterRegistry).forEach(key => {
                     if (getRegexFromPattern(key).test(action.type)) {
-                        patternRegistry[key].forEach(function (updater) {
-                            processUpdater(updater, action, key);
+                        this.pUpdaterRegistry[key].forEach(function (updater) {
+                            processUpdater.bind(this)(updater, action, key);
                         });
                     }
                 });
             }
-        };
+        }
 
         return function (action: string | Action) {
             // validate action
             action = processAction(action);
 
-            // Handle external actions during cycle
-            if (inCycle)
-                return executeAction(action, true);
+            // No actions should be dispatched from epic updaters
+            invariant(!inCycle, ErrorMessages.noDispatchInEpicUpdater);
 
             // No actions should be dispatched from epic listeners
             invariant(!afterCycle, ErrorMessages.noDispatchInEpicListener);
@@ -402,31 +456,14 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
             // dipatch cycle
             let processingError;
             try {
-                executeAction(action, true);
+                executeAction.bind(this)(action, true);
             } catch (e) {
                 processingError = e;
             }
 
             // End of dispatch cycle
             inCycle = false;
-            afterCycle = true;
-
-            let postProcessingErrors = [];
             const isSuccessfulCycle = !processingError;
-
-            if (isSuccessfulCycle) {
-                // handle epic listeners
-                postProcessingErrors = processEpicListeners(epicCache, sourceAction);
-
-                // update undo entry
-                if (undoEnabled && (action as Action).createUndoPoint) {
-                    if (undoStack.length === undoMaxStack)
-                        undoStack.shift();
-
-                    undoStack.push(undoEntry);
-                    redoStack = [];
-                }
-            }
 
             // Update or reset conditions
             conditionCache.forEach(condition => {
@@ -435,100 +472,127 @@ export const createStore = ({ debug, patterns, undo }: StoreParams = {}) => {
 
             // Update or reset epics
             Object.keys(epicCache).forEach(epicName => {
-                resetOrUpdateEpic(epicRegistry[epicName], isSuccessfulCycle);
+                resetOrUpdateEpic(this.epicRegistry[epicName], isSuccessfulCycle);
             });
 
-            afterCycle = false;
+            // update undo entry
+            if (isSuccessfulCycle) {
+                if (this.undoEnabled && (action as Action).createUndoPoint) {
+                    if (this.undoStack.length === this.undoMaxStack)
+                        this.undoStack.shift();
 
-            // After everything is reset throw the caught errors
-            if (processingError) {
+                    this.undoStack.push(undoEntry);
+                    this.redoStack = [];
+                }
+            } else {
+                // After everything is reset throw the caught errors
                 throw processingError;
             }
-            if (postProcessingErrors.length) {
+
+            // handle epic listeners
+            afterCycle = true;
+            const postProcessingErrors =
+                this._processStoreListeners(epicCache, sourceAction);
+
+            afterCycle = false;
+            if (postProcessingErrors.length)
                 throw postProcessingErrors;
-            }
         };
     })();
 
-    store.addListener = function (conditions, handler) {
-        conditions = conditions.map(processCondition.bind(null, makeError()()));
-        const epicListener = { conditions, handler };
-        const cache = conditions.map(({ type }) => {
-            let listeners = epicListeners;
-            if (patternsEnabled && /\*/.test(type)) listeners = patternListeners;
+    on(condition: AnyCondition | ResolvableCondition, handler: Function) {
+        const updater = makeUpdater(condition, handler as EpicHandler);
+        const { conditions } = updater;
 
-            if (!listeners[type]) listeners[type] = [];
-            listeners[type].push(epicListener);
+        // register conditions
+        updater.conditions = conditions.map((inputCondition: AnyCondition, i) => {
+            return this._processUpdaterCondition(inputCondition, i, false,
+                ({ type, isPattern }: InternalCondition) => {
+                    let registry = this.storeListeners;
+                    if (this.patternsEnabled && isPattern)
+                        registry = this.pStoreListeners;
 
-            return { listeners, type };
+                    if (!registry[type]) registry[type] = [];
+                    registry[type].push([updater, i]);
+                });
         });
 
-        return () => {
-            cache.forEach(({ listeners, type }) => {
-                listeners[type] =
-                    listeners[type].filter(listener => listener !== epicListener);
-            });
-        };
-    };
-
-    if (undo) {
-        const handleChange = function (from, to, key) {
-            const entry = from.pop();
-            const epicCache = {};
-            if (!entry) return epicCache;
-
-            Object.keys(entry).forEach(epicName => {
-                const epic = epicRegistry[epicName];
-                const epicEntry = entry[epicName];
-                ['state', 'scope'].forEach(entity => {
-                    if (epicEntry[entity]) {
-                        epic[entity] = freeze(epicEntry[entity][key](clone(epic[entity])));
-                    }
-                });
-                epicCache[epicName] = epic.state;
-            });
-
-            to.push(entry);
-            return epicCache;
-        };
-
-        store.undo = function () {
-            const epicCache = handleChange(undoStack, redoStack, 'undo');
-            processEpicListeners(epicCache, UNDO_ACTION);
-        };
-
-        store.redo = function () {
-            const epicCache = handleChange(redoStack, undoStack, 'redo');
-            processEpicListeners(epicCache, REDO_ACTION);
-        };
+        return () => this._off(updater);;
     }
 
-    const getEpic = function (epicName, key) {
-        const epic = epicRegistry[epicName];
+    private _off(updater: Updater) {
+        [this.storeListeners, this.pStoreListeners].forEach(registry => {
+            updater.conditions.forEach(({ type }: InternalCondition) => {
+                registry[type] &&
+                    (registry[type] =
+                        registry[type].filter(([u]) => updater !== u));
+            });
+        });
+    }
+
+    private _handleUndoChange(from, to, key) {
+        const entry = from.pop();
+        const epicCache = {};
+        if (!entry) return epicCache;
+
+        Object.keys(entry).forEach(epicName => {
+            const epic = this.epicRegistry[epicName];
+            const epicEntry = entry[epicName];
+            ['state', 'scope'].forEach(entity => {
+                if (epicEntry[entity]) {
+                    epic[entity] = freeze(epicEntry[entity][key](clone(epic[entity])));
+                }
+            });
+            epicCache[epicName] = epic.state;
+        });
+
+        to.push(entry);
+        return epicCache;
+    }
+
+    get undo() {
+        if (this.undoEnabled) {
+            return () => {
+                const epicCache = this._handleUndoChange(this.undoStack, this.redoStack, 'undo');
+                this._processStoreListeners(epicCache, UNDO_ACTION);
+            };
+        }
+    }
+
+    get redo() {
+        if (this.undoEnabled) {
+            return () => {
+                const epicCache = this._handleUndoChange(this.redoStack, this.undoStack, 'redo');
+                this._processStoreListeners(epicCache, REDO_ACTION);
+            };
+        }
+    }
+
+    private _getEpic(epicName, key) {
+        const epic = this.epicRegistry[epicName];
         return epic ? epic[key] : null;
-    };
-
-    store.getEpicState = function (epicName) {
-        return getEpic(epicName, 'state');
-    };
-
-    if (debug) {
-        store.getEpicScope = function (epicName) {
-            return getEpic(epicName, 'scope');
-        };
-
-        store.getEpicUpdaters = function (epicName, index) {
-            return getEpic(epicName, 'updaters')[index].map(({ conditions }) => ({
-                conditions: conditions.map(condition => ({ ...condition }))
-            }));
-        };
-
-        store.getEpicListeners = function (conditionType) {
-            return epicListeners[conditionType].map(({ conditions }) => ({
-                conditions: conditions.map(condition => ({ ...condition }))
-            }));
-        };
     }
 
-    return store;
-};
+    getEpicState(epicName) {
+        return this._getEpic(epicName, 'state');
+    }
+
+    getEpicScope(epicName) {
+        return this._getEpic(epicName, 'scope');
+    }
+
+    _getUpdaterConditions(epicName, name) {
+        const updaters = this._getEpic(epicName, '_updaters');
+        const updater = updaters.find(({ name: n }) => name === n);
+        return updater?.conditions.map(condition => ({ ...condition }));
+    }
+
+    getStoreListeners(conditionType) {
+        return (this.storeListeners[conditionType] || this.pStoreListeners[conditionType]).map(([updater]) => {
+            return {
+                ...updater,
+                conditions: updater.conditions.map((condition: InternalCondition) => ({ ...condition }))
+            };
+        });
+    }
+}

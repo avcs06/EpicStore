@@ -1,33 +1,15 @@
-import { Action } from './Action';
-import { ResolvableCondition, InputCondition } from './Condition';
-import { INITIAL_VALUE, isArray, freeze } from './object';
-
-interface EpicHandlerResponse {
-    state?: any;
-    scope?: any;
-    actions?: Action[]
-}
-
-interface EpicHandler {
-    (values: any): EpicHandlerResponse
-}
-
-export interface Updater {
-    epic: string;
-    name: string | number;
-    handler: EpicHandler;
-    conditions: InputCondition[];
-}
+import { ResolvableCondition, AnyCondition } from './Condition';
+import { INITIAL_VALUE, freeze } from './object';
+import { Updater, EpicHandler, makeUpdater } from './Updater';
 
 export class Epic {
     name: string;
     state: any;
     scope: any;
 
-    private _updaters: Updater[] = [];
-    get updaters() {
-        return this._updaters;
-    }
+    _updaters: Updater[] = [];
+    private _stores: any = [];
+    private _updaterhash: any = {};
 
     constructor(name, state = INITIAL_VALUE, scope = INITIAL_VALUE) {
         this.name = name;
@@ -35,48 +17,34 @@ export class Epic {
         this.scope = freeze(scope === null ? INITIAL_VALUE : scope);
     }
 
-    on(condition: InputCondition | ResolvableCondition, handler: EpicHandler) {
-        let isObjectFormat = false, isArrayFormat = false, isSoloFormat = false;
-        let indexedKeys = [], inputConditions;
+    on(condition: AnyCondition | ResolvableCondition, handler: EpicHandler) {
+        const updater = makeUpdater(condition, handler);
+        updater.name = (!updater.name || updater.name === 'anonymous') ?
+            `Listener[${this._updaters.length}]` : updater.name;
+        updater.epic = this.name;
 
-        if ((condition as ResolvableCondition).__ricochet_resolve) {
-            delete (condition as ResolvableCondition).__ricochet_resolve;
-            if (isArray(condition)) {
-                isArrayFormat = true;
-                inputConditions = condition;
-            } else {
-                isObjectFormat = true;
-                indexedKeys = Object.keys(condition);
-                inputConditions = indexedKeys.map(key => condition[key]);
-            }
-        } else {
-            isSoloFormat = true;
-            inputConditions = [condition as InputCondition];
-        }
-
-        this._updaters.push({
-            epic: this.name,
-            name: handler.name || this._updaters.length,
-            conditions: inputConditions,
-            handler: (values, ...args) => {
-                let outputValues;
-                switch (true) {
-                    case isSoloFormat:
-                        outputValues = values[0]
-                        break;
-
-                    case isArrayFormat:
-                        outputValues = values
-                        break;
-
-                    case isObjectFormat:
-                        outputValues = values.reduce((a, c, i) => 
-                            Object.assign(a, { [indexedKeys[i]]: c }) , {});
-                        break;
-                }
-
-                return handler.bind(this)(outputValues, ...args);
-            }
+        this._updaters.push(updater);
+        this._updaterhash[updater.id] = updater;
+        this._stores.forEach(store => {
+            store._addUpdater(updater);
         });
+
+        return () => this._off(updater.id);;
+    }
+
+    private _off(id: number) {
+        const updater = this._updaterhash[id];
+        delete this._updaterhash[id];
+
+        const index = this._updaters.indexOf(updater);
+        if (index > -1) this._updaters.splice(index, 1);
+
+        this._stores.forEach(store => {
+            store._removeUpdater(updater);
+        });
+    }
+
+    _addStore(store) {
+        this._stores.push(store);
     }
 }

@@ -19,7 +19,7 @@ export class Action {
     }
 }
 
-type InputAction = string | Action;
+export type InputAction = string | Action;
 
 export const getActionFrom = (action: InputAction): Action =>
     typeof action === 'string' ? { type: action } : { ...action };
