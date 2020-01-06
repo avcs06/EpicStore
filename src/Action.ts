@@ -21,6 +21,7 @@ export class Action {
 
 export type InputAction = string | Action;
 
+// Action Composers
 export const getActionFrom = (action: InputAction): Action =>
     typeof action === 'string' ? { type: action } : { ...action };
 

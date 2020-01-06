@@ -1,13 +1,9 @@
 
-import Action from '../../src/Action';
-import { createStore } from '../../src/EpicStore';
-import Condition from '../../src/Condition';
+import { Store, Condition, Epic, Action } from '../../src';
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
-import Epic from '../../src/Epic';
-import Updater from '../../src/Updater';
-const EpicStore = createStore({ debug: true });
+const EpicStore = new Store();
 
-describe("Basic functionalities", function() {
+fdescribe("Basic functionalities", function() {
     it("Should update epic state and scope on action", function() {
         const epic = makeEpic();
         const action = makeAction();
@@ -19,7 +15,7 @@ describe("Basic functionalities", function() {
         expect(EpicStore.getEpicState(epic).counter).toBe(1);
         expect(EpicStore.getEpicScope(epic).counter).toBe(1);
 
-        EpicStore.dispatch(new Action(action));
+        EpicStore.dispatch(action);
         expect(EpicStore.getEpicState(epic).counter).toBe(2);
         expect(EpicStore.getEpicScope(epic).counter).toBe(2);
     });
@@ -59,7 +55,7 @@ describe("Basic functionalities", function() {
         const epic1 = makeEpic();
         const epic2 = makeEpic();
         const action = makeAction();
-        const additionalParams = {};
+        const additionalParams: any = {};
         EpicStore.register(makeCounterEpic(epic1, action));
         EpicStore.register(makeCounterEpic(epic2, epic1, additionalParams));
         expect(EpicStore.getEpicState(epic1).counter).toBe(0);
@@ -68,19 +64,19 @@ describe("Basic functionalities", function() {
         EpicStore.dispatch(action);
         expect(EpicStore.getEpicState(epic1).counter).toBe(1);
         expect(EpicStore.getEpicScope(epic2).counter).toBe(1);
-        expect(EpicStore.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(1);
+        expect(EpicStore._getUpdaterConditions(epic2, 'Listener[0]')[0].value.counter).toBe(1);
 
         additionalParams.withError = true;
         expect(() => EpicStore.dispatch(action)).toThrow();
         expect(EpicStore.getEpicState(epic1).counter).toBe(1);
         expect(EpicStore.getEpicScope(epic2).counter).toBe(1);
-        expect(EpicStore.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(1);
+        expect(EpicStore._getUpdaterConditions(epic2, 'Listener[0]')[0].value.counter).toBe(1);
 
         additionalParams.withError = false;
         EpicStore.dispatch(action);
         expect(EpicStore.getEpicState(epic1).counter).toBe(2);
         expect(EpicStore.getEpicScope(epic2).counter).toBe(2);
-        expect(EpicStore.getEpicUpdaters(epic2, 0)[0].conditions[0].value.counter).toBe(2);
+        expect(EpicStore._getUpdaterConditions(epic2, 'Listener[0]')[0].value.counter).toBe(2);
     });
 
     it('Epic listener condition value should get updated, even if the listerner throws an error', function () {
@@ -88,11 +84,11 @@ describe("Basic functionalities", function() {
         const action = makeAction();
 
         EpicStore.register(makeCounterEpic(epic, action));
-        EpicStore.addListener([epic], () => { throw 'Fake Error'; });
+        EpicStore.on(epic, () => { throw 'Fake Error'; });
 
-        expect(EpicStore.getEpicListeners(epic)[0].conditions[0].value, undefined);
-        expect(() => EpicStore.dispatch(action)).toThrow(['Fake Error']);
-        expect(EpicStore.getEpicListeners(epic)[0].conditions[0].value.counter, 1);
+        (expect as any)(EpicStore.getStoreListeners(epic)[0].conditions[0].value, undefined);
+        (expect as any)(() => EpicStore.dispatch(action)).toThrow(['Fake Error']);
+        (expect as any)(EpicStore.getStoreListeners(epic)[0].conditions[0].value.counter, 1);
     });
 
     it('Should not dispatch epic action on passive update', function () {
@@ -100,14 +96,14 @@ describe("Basic functionalities", function() {
         const epic2 = makeEpic();
         const action = makeAction();
 
-        EpicStore.register(new Epic(epic1, {}, null, [
-            new Updater([action], () => ({
-                state: { a: 1 },
-                passive: true
-            }))
-        ]));
-        EpicStore.register(makeCounterEpic(epic2, epic1));
+        const epic = new Epic(epic1, {}, null);
+        EpicStore.register(epic);
+        epic.on(action, () => ({
+            state: { a: 1 },
+            passive: true
+        }));
 
+        EpicStore.register(makeCounterEpic(epic2, epic1));
         EpicStore.dispatch(action);
         expect(EpicStore.getEpicState(epic2).counter).toBe(0);
     });

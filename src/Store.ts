@@ -1,7 +1,7 @@
 import memoize from 'memoizee';
 import invariant from 'invariant';
 import { Error, ErrorMessages } from './Error';
-import { INITIAL_VALUE, MERGE_ERROR, freeze, clone, merge, isEqual, isArray } from './object';
+import { INITIAL_VALUE, MERGE_ERROR, freeze, clone, merge, isEqual, isArray, makeApplyChanges } from './object';
 
 import { Epic } from './Epic';
 import { Updater, makeUpdater, EpicHandler } from './Updater';
@@ -86,6 +86,12 @@ const splitNestedValues = ([...values]) => {
     return valuesList.length ? valuesList : [values];
 };
 
+function forEach(map = [], iterator) {
+    map.forEach(list => {
+        list.forEach(iterator);
+    });
+}
+
 function alwaysFulfilledWith(epicRegistry) {
     if (this.value === INITIAL_VALUE && epicRegistry[this.type])
         this.value = getSelectorValue(this, {
@@ -100,11 +106,11 @@ const UNDO_ACTION = { type: 'STORE_UNDO' };
 const REDO_ACTION = { type: 'STORE_REDO' };
 
 interface UndoParams {
-    maxStack: number
+    maxStack?: number;
+    manualUndoPoints?: boolean;
 }
 
 interface StoreParams {
-    debug?: boolean;
     patterns?: boolean;
     undo?: boolean | UndoParams
 }
@@ -118,27 +124,28 @@ interface InternalUpdater extends Updater {
 }
 
 type UpdaterList = [InternalUpdater, number][];
+type UpdaterMap = Map<string, UpdaterList>;
 
-class Store {
+export class Store {
     private undoEnabled = false;
-    private debugEnabled = false;
     private patternsEnabled = false;
-    private undoMaxStack = 10;
+    private undoMaxStack;
 
     private epicRegistry: { [key: string]: InternalEpic } = {};
-    private updaterRegistry: { [key: string]: UpdaterList } = {};
-    private pUpdaterRegistry: { [key: string]: UpdaterList } = {};
+    private updaterRegistry: { [key: string]: UpdaterMap } = {};
+    private pUpdaterRegistry: { [key: string]: UpdaterMap } = {};
+    private uRegistries = [this.updaterRegistry, this.pUpdaterRegistry];
 
     private storeListeners: { [key: string]: UpdaterList } = {};
     private pStoreListeners: { [key: string]: UpdaterList } = {};
+    private sRegistries = [this.storeListeners, this.pStoreListeners];
 
     private undoStack: Function[] = [];
     private redoStack: Function[] = [];
 
-    constructor(options: StoreParams) {
-        this.undoEnabled = Boolean(options.undo);
-        this.debugEnabled = Boolean(options.debug);
-        this.patternsEnabled = Boolean(options.patterns);
+    constructor(options?: StoreParams) {
+        this.undoEnabled = Boolean(options?.undo);
+        this.patternsEnabled = Boolean(options?.patterns);
         this.undoMaxStack = (options?.undo as UndoParams)?.maxStack || 10;
     }
 
@@ -150,7 +157,7 @@ class Store {
 
         updaters.forEach(this._addUpdater.bind(this));
         this.epicRegistry[name] = epic;
-        epic._addStore(this);
+        epic._stores.add(this);
     }
 
     unregister(epic: string | Epic) {
@@ -159,15 +166,11 @@ class Store {
 
         if (epicObject) {
             delete this.epicRegistry[epicName];
-
-            const completed = {};
+            epicObject._stores.delete(this);
             epicObject._updaters.forEach(({ conditions }) => {
                 conditions.forEach(({ type }: InternalCondition) => {
-                    [this.updaterRegistry, this.pUpdaterRegistry].forEach(registry => {
-                        if (registry[type] && !completed[type]) {
-                            completed[type] = true;
-                            registry[type] = registry[type].filter(([{ epic }]) => epic !== epicName);
-                        }
+                    this.uRegistries.forEach(registry => {
+                        registry[type] && registry[type].delete(epicName);
                     });
                 });
             });
@@ -196,18 +199,21 @@ class Store {
                     if (this.patternsEnabled && isPattern)
                         registry = this.pUpdaterRegistry;
 
-                    if (!registry[type]) registry[type] = [];
-                    registry[type].push([updater, i]);
+                    let conditionMap = registry[type];
+                    if (!conditionMap) registry[type] = conditionMap = new Map();
+                    if (!conditionMap[epicName]) conditionMap[epicName] = [];
+                    conditionMap[epicName].push([updater, i]);
                 });
         });
     }
 
     _removeUpdater(updater: Updater) {
-        [this.updaterRegistry, this.pUpdaterRegistry].forEach(registry => {
-            updater.conditions.forEach(({ type }: InternalCondition) => {
+        const { conditions, name, epic: epicName } = updater;
+        conditions.forEach(({ type }: InternalCondition) => {
+            this.uRegistries.forEach(registry => {
                 registry[type] &&
-                    (registry[type] =
-                        registry[type].filter(([u]) => updater !== u));
+                    registry[type].set(epicName,
+                        registry[type].get(epicName).filter(([u]) => updater !== u));
             });
         });
     }
@@ -304,7 +310,6 @@ class Store {
         let sourceAction, epicCache, actionCache, conditionCache, inCycle, afterCycle, undoEntry;
 
         function processUpdater(updater, action, pattern?) {
-            const shouldCreateUndoPoint = this.undoEnabled && action.createUndoPoint;
             const [{ epic: epicName, conditions, handler }, conditionIndex] = updater;
 
             // If action target doesn't match the epicName return
@@ -341,9 +346,9 @@ class Store {
                     } : conditionValue;
             } else return;
 
-            // If this is passive condition, there should be atleast one non passive fulfilled condition
-            if (activeCondition.passive &&
-                !conditions.some(c => !c.passive && c.fulfilledBy)) return;
+            // If this is readonly condition, there should be atleast one non readonly fulfilled condition
+            if (activeCondition.readonly &&
+                !conditions.some(c => !c.readonly && c.fulfilledBy)) return;
 
             // All conditions should either be always fulfilled or fulfilled in the cycle
             if (!conditions.every(condition =>
@@ -368,7 +373,7 @@ class Store {
                         let updatedValue, changes;
                         try {
                             [updatedValue, changes] =
-                                merge(clone(epic['_' + entity]), handlerUpdate[entity], shouldCreateUndoPoint);
+                                merge(clone(epic['_' + entity]), handlerUpdate[entity], this.undoEnabled);
                         } catch (e) {
                             invariant(e !== MERGE_ERROR,
                                 new Error(epicName, name).throw(ErrorMessages.invalidHandlerUpdate));
@@ -376,7 +381,7 @@ class Store {
                         }
 
                         epic['_' + entity] = freeze(updatedValue);
-                        if (shouldCreateUndoPoint) {
+                        if (this.undoEnabled) {
                             const { undo: undoChange, redo: redoChange } = changes;
                             undoEntry[epicName] = {
                                 ...(undoEntry[epicName] || {}),
@@ -398,9 +403,7 @@ class Store {
             });
 
             if (stateUpdated) {
-                const epicAction = new Action(epicName, epic._state, {
-                    createUndoPoint: shouldCreateUndoPoint
-                });
+                const epicAction = new Action(epicName, epic._state);
                 executeAction.bind(this)(epicAction, false);
             }
         }
@@ -419,7 +422,7 @@ class Store {
             }
 
             // handle direct updaters
-            (this.updaterRegistry[action.type] || []).forEach(updater => {
+            forEach(this.updaterRegistry[action.type], updater => {
                 processUpdater.bind(this)(updater, action);
             });
 
@@ -427,7 +430,7 @@ class Store {
             if (this.patternsEnabled) {
                 Object.keys(this.pUpdaterRegistry).forEach(key => {
                     if (getRegexFromPattern(key).test(action.type)) {
-                        this.pUpdaterRegistry[key].forEach(function (updater) {
+                        forEach(this.pUpdaterRegistry[key], updater => {
                             processUpdater.bind(this)(updater, action, key);
                         });
                     }
@@ -477,12 +480,36 @@ class Store {
 
             // update undo entry
             if (isSuccessfulCycle) {
-                if (this.undoEnabled && (action as Action).createUndoPoint) {
-                    if (this.undoStack.length === this.undoMaxStack)
-                        this.undoStack.shift();
-
-                    this.undoStack.push(undoEntry);
+                if (this.undoEnabled) {
+                    // always clear redostack on user change
                     this.redoStack = [];
+
+                    // If fresh undopoint create a new entry, else merge to previous entry
+                    if ((action as Action).createUndoPoint || !this.undoStack.length) {
+                        if (this.undoStack.length === this.undoMaxStack)
+                            this.undoStack.shift();
+
+                        this.undoStack.push(undoEntry);
+                    } else {
+                        const currentEntry = undoEntry;
+                        const previousEntry = this.undoStack[this.undoStack.length - 1];
+                        Object.keys(currentEntry).forEach(epic => {
+                            if (!previousEntry[epic]) {
+                                previousEntry[epic] = currentEntry[epic];
+                            } else {
+                                ['state', 'scope'].forEach(entity => {
+                                    const pEntry = previousEntry[epic][entity];
+                                    const cEntry = currentEntry[epic][entity];
+                                    if (pEntry && cEntry) {
+                                        pEntry.undo = makeApplyChanges([cEntry.undo, pEntry.undo]);
+                                        pEntry.redo = makeApplyChanges([pEntry.redo, cEntry.redo]);
+                                    } else {
+                                        previousEntry[epic][entity] = pEntry || cEntry;
+                                    }
+                                });
+                            }
+                        });
+                    }
                 }
             } else {
                 // After everything is reset throw the caught errors

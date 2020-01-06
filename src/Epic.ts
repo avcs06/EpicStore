@@ -7,11 +7,10 @@ export class Epic {
     state: any;
     scope: any;
 
-    _updaters: Updater[] = [];
-    private _stores: any = [];
-    private _updaterhash: any = {};
+    _stores: Set<any> = new Set();
+    _updaters: Set<Updater> = new Set();
 
-    constructor(name, state = INITIAL_VALUE, scope = INITIAL_VALUE) {
+    constructor(name: string, state: any = INITIAL_VALUE, scope: any = INITIAL_VALUE) {
         this.name = name;
         this.state = freeze(state === null ? INITIAL_VALUE : state);
         this.scope = freeze(scope === null ? INITIAL_VALUE : scope);
@@ -19,32 +18,20 @@ export class Epic {
 
     on(condition: AnyCondition | ResolvableCondition, handler: EpicHandler) {
         const updater = makeUpdater(condition, handler);
-        updater.name = (!updater.name || updater.name === 'anonymous') ?
-            `Listener[${this._updaters.length}]` : updater.name;
+        updater.name = updater.name === 'anonymous' ?
+            `Listener[${this._updaters.size}]` : updater.name;
         updater.epic = this.name;
 
-        this._updaters.push(updater);
-        this._updaterhash[updater.id] = updater;
+        this._updaters.add(updater);
         this._stores.forEach(store => {
             store._addUpdater(updater);
         });
 
-        return () => this._off(updater.id);;
-    }
-
-    private _off(id: number) {
-        const updater = this._updaterhash[id];
-        delete this._updaterhash[id];
-
-        const index = this._updaters.indexOf(updater);
-        if (index > -1) this._updaters.splice(index, 1);
-
-        this._stores.forEach(store => {
-            store._removeUpdater(updater);
-        });
-    }
-
-    _addStore(store) {
-        this._stores.push(store);
+        return () => {
+            this._updaters.delete(updater);
+            this._stores.forEach(store => {
+                store._removeUpdater(updater);
+            });
+        };
     }
 }

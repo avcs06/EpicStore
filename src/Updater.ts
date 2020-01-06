@@ -1,27 +1,27 @@
 import { isArray } from './object';
+import { InputAction } from './Action';
 import { ResolvableCondition, AnyCondition } from './Condition';
 
 export interface EpicHandlerResponse {
     state?: any;
     scope?: any;
+    actions?: InputAction[];
+    passive?: boolean;
 }
 
 export interface EpicHandler {
-    (values: any, any): EpicHandlerResponse;
+    (values: any, metadata?: any): EpicHandlerResponse;
 }
 
 export interface Updater {
-    id: number;
     epic?: string;
     name: string | number;
     handler: EpicHandler;
     conditions: AnyCondition[];
 }
 
-export const makeUpdater = (() => {
-    let counter = 0;
-
-    return (condition: AnyCondition | ResolvableCondition, handler: EpicHandler): Updater => {
+export const makeUpdater =
+    (condition: AnyCondition | ResolvableCondition, handler: EpicHandler): Updater => {
         let isObjectFormat = false, isArrayFormat = false, isSoloFormat = false;
         let indexedKeys = [], inputConditions;
 
@@ -41,10 +41,9 @@ export const makeUpdater = (() => {
         }
 
         return {
-            id: counter++,
             name: handler.name || "anonymous",
             conditions: inputConditions,
-            handler: (values, ...args) => {
+            handler: (values, metadata) => {
                 let outputValues;
                 switch (true) {
                     case isSoloFormat:
@@ -61,8 +60,7 @@ export const makeUpdater = (() => {
                         break;
                 }
 
-                return handler.bind(this)(outputValues, ...args);
+                return handler.bind(this)(outputValues, metadata);
             }
         };
     };
-})();

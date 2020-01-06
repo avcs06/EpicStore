@@ -1,10 +1,10 @@
 {
   "spec_dir": "spec",
   "spec_files": [
-    "**/*.js"
+    "**/*.ts"
   ],
   "helpers": [
-    "../node_modules/jasmine-es6/lib/install.js"
+    "./helpers/loader.js"
   ],
   "stopSpecOnExpectationFailure": false,
   "random": true

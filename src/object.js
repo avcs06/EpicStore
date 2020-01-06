@@ -46,6 +46,9 @@ export const clone = object => {
     return object;
 };
 
+export const makeApplyChanges = changes => s =>
+    changes.reduce((a, c) => { c(a); return a; }, s);
+
 // Arrays will be considered as primitives when merging, full replace
 export const merge = (() => {
     const noop = s => s;
@@ -55,9 +58,6 @@ export const merge = (() => {
     const makePropSetter = (prop, setter) => s => s[prop] = setter(s[prop]);
 
     const defaultChanges = { undo: noop, redo: noop };
-    const makeApplyChanges = changes => s =>
-        changes.reduce((a, c) => { c(a); return a; }, s);
-
     return (_object, object, withUndo, internal = false) => {
         let changes = !internal && defaultChanges;
         if (_object !== INITIAL_VALUE) {

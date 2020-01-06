@@ -22,8 +22,8 @@ export type AnyCondition = SingleCondition | AnyOfCondition;
 export const anyOf = (...conditions: AnyOfCondition): AnyOfCondition => conditions;
 
 type ResolvableInput = AnyCondition[] | { [key: string]: AnyCondition };
-interface Resolvable { __ricochet_resolve: boolean; }
 
+interface Resolvable { __ricochet_resolve: boolean; }
 export type ResolvableCondition =
     AnyCondition[] & Resolvable | { [key: string]: AnyCondition } & Resolvable;
 
@@ -37,11 +37,8 @@ export const getConditionFrom = (condition: SingleCondition): Condition =>
         (condition as EpicLike).name ? { type: (condition as EpicLike).name} :
             { ...(condition as Condition) };
 
-const updateCondition = (condition: SingleCondition, change: Object): Condition =>
-    Object.assign(getConditionFrom(condition), change);
-
 export const readonly = (condition: SingleCondition): Condition =>
-    updateCondition(condition, { readonly: true });
+    Object.assign(getConditionFrom(condition), { readonly: true });
 
 export const withSelector = (condition: SingleCondition, selector: Function): Condition =>
-    updateCondition(condition, { selector });
+    Object.assign(getConditionFrom(condition), { selector });
