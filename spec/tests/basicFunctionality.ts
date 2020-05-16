@@ -3,18 +3,22 @@ import { Store, Condition, Epic, Action } from '../../src';
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
 const EpicStore = new Store();
 
-fdescribe("Basic functionalities", function() {
+describe("Basic functionalities", function() {
     it("Should update epic state and scope on action", function() {
         const epic = makeEpic();
         const action = makeAction();
+
+        // Using Condition class
         EpicStore.register(makeCounterEpic(epic, new Condition(action)));
         expect(EpicStore.getEpicState(epic).counter).toBe(0);
         expect(EpicStore.getEpicScope(epic).counter).toBe(0);
 
+        // Using Action class
         EpicStore.dispatch(new Action(action));
         expect(EpicStore.getEpicState(epic).counter).toBe(1);
         expect(EpicStore.getEpicScope(epic).counter).toBe(1);
 
+        // Using action as string
         EpicStore.dispatch(action);
         expect(EpicStore.getEpicState(epic).counter).toBe(2);
         expect(EpicStore.getEpicScope(epic).counter).toBe(2);
@@ -24,6 +28,8 @@ fdescribe("Basic functionalities", function() {
         const epic = makeEpic();
         const action = makeAction();
         const verify = jasmine.createSpy('verify');
+
+        // Using condition as string
         EpicStore.register(makeCounterEpic(epic, action, { verify }));
 
         expect(EpicStore.getEpicState(epic).counter).toBe(0);

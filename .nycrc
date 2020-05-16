@@ -2,5 +2,6 @@
     "extends": "@istanbuljs/nyc-config-babel",
     "reporter": ["html", "text-summary"],
     "check-coverage": true,
-    "include": ["src/**"]
+    "include": ["src/**"],
+    "exclude": ["src/index.ts"]
 }

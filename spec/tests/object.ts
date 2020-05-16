@@ -1,6 +1,6 @@
-import * as ObjectUtils from '../../src/object-utils';
+import * as ObjectUtils from '../../src/object';
 
-function verifyMerge(a, b, isObject) {
+function verifyMerge(a, b, isObject = false) {
   const [updatedEntity, { undo, redo }] = ObjectUtils.merge(a, b, true);
   const expectedUpdatedEntity = isObject ? { ...a, ...b } : b;
   expect(updatedEntity).toEqual(expectedUpdatedEntity);
@@ -73,13 +73,13 @@ describe("Object Utilities: Merge", function () {
   });
 
   it("Object with no change", function () {
-    verifyMerge({ a: 1, b: 1 }, { a: 1, b:1 }, true);
+    verifyMerge({ a: 1, b: 1 }, { a: 1, b: 1 }, true);
   });
 
   // Cyclic Object
   it("Cyclic Object should throw", function () {
-    var a = { b: 1 };
-    var b = { b: 3 };
+    var a: any = { b: 1 };
+    var b: any = { b: 3 };
     a.a = a;
     b.a = b;
     expect(() => ObjectUtils.merge(a, b)).toThrow();
@@ -127,8 +127,8 @@ describe("Object Utilities: isEqual", function () {
 
   // Cyclic Object
   it("Cyclic Object should throw", function () {
-    var a = { b: 1 };
-    var b = { b: 1 };
+    var a: any = { b: 1 };
+    var b: any = { b: 1 };
     a.a = a;
     b.a = b;
     expect(() => ObjectUtils.isEqual(a, b)).toThrow();
@@ -153,7 +153,7 @@ describe("Object Utilities: clone", function () {
 
   // Cyclic Object
   it("Cyclic Object should throw", function () {
-    var a = { b: 1 };
+    var a: any = { b: 1 };
     a.a = a;
     expect(() => ObjectUtils.clone(a)).toThrow();
   });
@@ -181,7 +181,7 @@ describe("Object Utilities: freeze", function () {
 
   // Cyclic Object
   it("Cyclic Object should throw", function () {
-    var a = { b: 1 };
+    var a: any = { b: 1 };
     a.a = a;
     expect(() => ObjectUtils.freeze(a)).toThrow();
   });

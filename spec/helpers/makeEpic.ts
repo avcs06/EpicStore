@@ -18,16 +18,16 @@ export const makeCounterEpic = (epicName, conditions, additionalParams: any = {}
     const epic = new Epic(epicName, { counter: 0 }, { counter: 0 });
     epic.on(resolve([
         ...(conditions ? conditions.constructor === Array ? conditions : [conditions] : [])
-    ]), (conditions, { state, scope }) => {
+    ]), function (conditions) {
         if (additionalParams.withError) {
             throw new Error('Fake Error');
         }
 
-        verify(conditions, { state, scope });
+        verify(conditions);
 
         return {
-            state: stateChange(state, conditions),
-            scope: scopeChange(scope, conditions),
+            state: stateChange(this.state, conditions),
+            scope: scopeChange(this.scope, conditions),
             actions: actionsToDispatch
         };
     });

@@ -7,8 +7,11 @@ export class Epic {
     state: any;
     scope: any;
 
-    _stores: Set<any> = new Set();
-    _updaters: Set<Updater> = new Set();
+    private _stores: Set<any> = new Set();
+    private _updaters: Set<Updater> = new Set();
+    get updaters() {
+        return [...this._updaters];
+    }
 
     constructor(name: string, state: any = INITIAL_VALUE, scope: any = INITIAL_VALUE) {
         this.name = name;
@@ -33,5 +36,13 @@ export class Epic {
                 store._removeUpdater(updater);
             });
         };
+    }
+
+    _registerStore(store) {
+        this._stores.add(store);
+    }
+
+    _unregisterStore(store) {
+        this._stores.delete(store);
     }
 }

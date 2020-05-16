@@ -1,6 +1,7 @@
 import { isArray } from './object';
 import { InputAction } from './Action';
-import { ResolvableCondition, AnyCondition } from './Condition';
+import { ResolvableCondition, isResolvableCondition,
+    AnyCondition, unResolveCondition } from './Condition';
 
 export interface EpicHandlerResponse {
     state?: any;
@@ -10,7 +11,7 @@ export interface EpicHandlerResponse {
 }
 
 export interface EpicHandler {
-    (values: any, metadata?: any): EpicHandlerResponse;
+    (values: any, metadata?: any): EpicHandlerResponse | void;
 }
 
 export interface Updater {
@@ -25,8 +26,8 @@ export const makeUpdater =
         let isObjectFormat = false, isArrayFormat = false, isSoloFormat = false;
         let indexedKeys = [], inputConditions;
 
-        if ((condition as ResolvableCondition).__ricochet_resolve) {
-            delete (condition as ResolvableCondition).__ricochet_resolve;
+        if (isResolvableCondition((condition as ResolvableCondition))) {
+            unResolveCondition(condition as ResolvableCondition);
             if (isArray(condition)) {
                 isArrayFormat = true;
                 inputConditions = condition;
@@ -43,7 +44,7 @@ export const makeUpdater =
         return {
             name: handler.name || "anonymous",
             conditions: inputConditions,
-            handler: (values, metadata) => {
+            handler: function (values, metadata) {
                 let outputValues;
                 switch (true) {
                     case isSoloFormat:
