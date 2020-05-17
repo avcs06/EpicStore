@@ -50,6 +50,16 @@ describe("Invalid Entries: should throw error", function() {
     }).toThrow(invariantError(errorMessage));
   });
 
+  it("on any pattern anyof condition", function () {
+    const epic = new Epic(makeEpic());
+    epic.on(resolve([anyOf('*')]), () => { });
+    const errorMessage = new RicochetError(epic.name, 'Listener[0]').get(ErrorMessages.invalidAnyOf);
+
+    expect(() => {
+      EpicStore.register(epic);
+    }).toThrow(invariantError(errorMessage));
+  });
+
   it("on dispatching inside epic listener", function() {
     const action1 = makeAction();
     const epic = new Epic(makeEpic(), { counter: 1 });

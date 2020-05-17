@@ -113,4 +113,31 @@ describe("Basic functionalities", function() {
         EpicStore.dispatch(action);
         expect(EpicStore.getEpicState(epic2).counter).toBe(0);
     });
+
+    it('Adding a handler on registered epic should function as expected', function () {
+        const epic1 = makeEpic();
+        const action = makeAction();
+        const handlerSpy = jasmine.createSpy();
+
+        const epic = new Epic(epic1, null);
+        EpicStore.register(epic);
+        epic.on(action, handlerSpy);
+
+        EpicStore.dispatch(action);
+        expect(handlerSpy).toHaveBeenCalledWith(undefined, { type: action });
+    });
+
+    it('Removing a handler on registered epic should function as expected', function () {
+        const epic1 = makeEpic();
+        const action = makeAction();
+        const handlerSpy = jasmine.createSpy();
+
+        const epic = new Epic(epic1, {}, null);
+        const off = epic.on(action, handlerSpy);
+        EpicStore.register(epic);
+        off();
+
+        EpicStore.dispatch(action);
+        expect(handlerSpy).not.toHaveBeenCalled();
+    });
 });

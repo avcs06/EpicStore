@@ -64,7 +64,7 @@ describe("Epic Listeners: ", function () {
         expect(listenerSpy).toHaveBeenCalled();
     });
 
-    it("Passive condition change should not trigger listener", function () {
+    it("Readonly condition change should not trigger listener", function () {
         const epic1 = makeEpic();
         const epic2 = makeEpic();
         const action1 = makeAction();
@@ -82,7 +82,7 @@ describe("Epic Listeners: ", function () {
         expect(listenerSpy).toHaveBeenCalled();
     });
 
-    it("Epic listener should be triggered if any one condition met", function () {
+    it("Epic listener should be triggered if atleast one condition is met", function () {
         const epic1 = makeEpic();
         const epic2 = makeEpic();
         const action1 = makeAction();

@@ -19,10 +19,6 @@ export class RicochetError {
         this.args = args;
     }
 
-    next(...args) {
-        this.args.push(...args);
-    }
-
     get(error) {
         return this.args.reduce((a, c, i) => a.replace('[' + i + ']', c), error);
     }
