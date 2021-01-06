@@ -1,4 +1,4 @@
-export { Action, withPayload, withTarget, withUndoPoint } from './Action';
-export { Condition, withGuard, withSelector, readonly, resolve, anyOf } from './Condition';
-export { Epic } from './Epic';
-export { Store } from './Store';
+export { withPayload, withTarget, withUndoPoint } from './action'
+export { withGuard, withSelector, readonly, resolve, anyOf } from './condition'
+export { makeEpic } from './epic'
+export { createStore } from './store'

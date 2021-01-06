@@ -1,6 +1,38 @@
 {
-    "parser": "babel-eslint",
+    "env": {
+        "browser": true,
+        "es2021": true
+    },
+    "extends": [
+        "eslint:recommended",
+        "standard",
+        "plugin:@typescript-eslint/recommended"
+    ],
+    "parser": "@typescript-eslint/parser",
+    "parserOptions": {
+        "ecmaFeatures": { "experimentalObjectRestSpread": true },
+        "ecmaVersion": 12,
+        "sourceType": "module"
+    },
+    "plugins": [
+        "babel",
+        "import",
+        "@typescript-eslint"
+    ],
     "rules": {
-        "strict": 0
+        "array-callback-return": "error",
+
+        "babel/no-invalid-this": "error",
+        "no-use-before-define": "off",
+        "@typescript-eslint/no-use-before-define": ["error"],
+
+        "global-require": "warn",
+        "no-prototype-builtins": "warn",
+
+        "indent": ["error", 4],
+        "linebreak-style": ["error", "unix"],
+        "quotes": ["error", "single"],
+        "semi": ["error", "never"],
+        "camelcase": "off"
     }
 }
