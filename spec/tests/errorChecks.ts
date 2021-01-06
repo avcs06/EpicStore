@@ -1,130 +1,137 @@
-import { Store, Epic, resolve, readonly, anyOf } from '../../src';
-import { ErrorMessages, RicochetError } from '../../src/errors';
-import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
-const EpicStore = new Store();
+/* eslint-disable @typescript-eslint/no-empty-function */
+import { createStore, resolve, readonly, anyOf, makeEpic as makeOriginalEpic } from '../../src'
+import { ErrorMessages, makeError } from '../../src/errors'
+import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic'
+const store = createStore()
 
 const invariantError = message => {
-  const error = new Error(message);
-  error.name = 'Invariant Violation';
-  return error;
-};
+    const error = new Error(message)
+    error.name = 'Invariant Violation'
+    return error
+}
 
-describe("Invalid Entries: should throw error", function() {
-  it("on duplicate epic name", function() {
-    const epic1 = makeEpic();
-    const errorMessage = new RicochetError(epic1).get(ErrorMessages.duplicateEpic);
+describe('Invalid Entries: should throw error', function () {
+    it('on duplicate epic name', function () {
+        const epic1 = makeEpic()
+        const errorMessage = makeError(epic1).get(ErrorMessages.duplicateEpic)
 
-    EpicStore.register(new Epic(epic1));
-    expect(() => {
-      EpicStore.register(new Epic(epic1));
-    }).toThrow(invariantError(errorMessage));
-  });
+        store.register(makeOriginalEpic(epic1))
 
-  it("on all readonly conditions", function() {
-    const epic = new Epic(makeEpic());
-    epic.on(resolve([readonly(makeAction()), readonly(makeAction())]), () => {});
-    const errorMessage = new RicochetError(epic.name, 'Listener[0]').get(ErrorMessages.noReadonlyUpdaters);
+        expect(() => {
+            store.register(makeOriginalEpic(epic1))
+        }).toThrow(invariantError(errorMessage))
+    })
 
-    expect(() => {
-      EpicStore.register(epic);
-    }).toThrow(invariantError(errorMessage));
-  });
+    it('on all readonly conditions', function () {
+        const epic = makeOriginalEpic(makeEpic())
+        epic.useReducer(resolve([readonly(makeAction()), readonly(makeAction())]), () => {})
+        const errorMessage = makeError(epic.name, 'R[0]').get(ErrorMessages.noReadonlyUpdaters)
 
-  it("on readonly pattern condition", function () {
-    const epic = new Epic(makeEpic());
-    epic.on(resolve([readonly('PATTERN_*')]), () => { });
-    const errorMessage = new RicochetError(epic.name, 'Listener[0]').get(ErrorMessages.invalidPattern);
+        expect(() => {
+            store.register(epic)
+        }).toThrow(invariantError(errorMessage))
+    })
 
-    expect(() => {
-      EpicStore.register(epic);
-    }).toThrow(invariantError(errorMessage));
-  });
+    it('on readonly pattern condition', function () {
+        const epic = makeOriginalEpic(makeEpic())
+        epic.useReducer(resolve([readonly('PATTERN_*')]), () => {})
+        const errorMessage = makeError(epic.name, 'R[0]').get(ErrorMessages.invalidPattern)
 
-  it("on readonly anyof condition", function () {
-    const epic = new Epic(makeEpic());
-    epic.on(resolve([anyOf(readonly(makeAction()))]), () => { });
-    const errorMessage = new RicochetError(epic.name, 'Listener[0]').get(ErrorMessages.invalidAnyOf);
+        expect(() => {
+            store.register(epic)
+        }).toThrow(invariantError(errorMessage))
+    })
 
-    expect(() => {
-      EpicStore.register(epic);
-    }).toThrow(invariantError(errorMessage));
-  });
+    it('on readonly anyof condition', function () {
+        const epic = makeOriginalEpic(makeEpic())
+        epic.useReducer(resolve([anyOf(readonly(makeAction()))]), () => { })
+        const errorMessage = makeError(epic.name, 'R[0]').get(ErrorMessages.invalidAnyOf)
 
-  it("on any pattern anyof condition", function () {
-    const epic = new Epic(makeEpic());
-    epic.on(resolve([anyOf('*')]), () => { });
-    const errorMessage = new RicochetError(epic.name, 'Listener[0]').get(ErrorMessages.invalidAnyOf);
+        expect(() => {
+            store.register(epic)
+        }).toThrow(invariantError(errorMessage))
+    })
 
-    expect(() => {
-      EpicStore.register(epic);
-    }).toThrow(invariantError(errorMessage));
-  });
+    it('on any pattern anyof condition', function () {
+        const epic = makeOriginalEpic(makeEpic())
+        epic.useReducer(resolve([anyOf('*')]), () => { })
+        const errorMessage = makeError(epic.name, 'R[0]').get(ErrorMessages.invalidAnyOf)
 
-  it("on dispatching inside epic listener", function() {
-    const action1 = makeAction();
-    const epic = new Epic(makeEpic(), { counter: 1 });
-    epic.on(action1, () => ({
-      state: { counter: epic.state.counter + 1 }
-    }));
+        expect(() => {
+            store.register(epic)
+        }).toThrow(invariantError(errorMessage))
+    })
 
-    EpicStore.register(epic);
-    EpicStore.on(epic.name, function epicListener1 () {
-      EpicStore.dispatch({ type: 'INVALID_ACTION_1' });
-    });
+    it('on dispatching inside epic listener', function () {
+        const action1 = makeAction()
+        const epic = makeOriginalEpic(makeEpic())
+        epic.useReducer(action1, () => ({
+            state: { counter: epic.state.counter + 1 }
+        }))
 
-    expect(() => {
-      EpicStore.dispatch(action1);
-    }).toThrow([invariantError(new RicochetError('epicListener1').get(ErrorMessages.noDispatchInEpicListener))]);
-  });
+        store.register(epic)
+        store.addListener(epic.name, function epicListener1 () {
+            store.dispatch({ type: 'INVALID_ACTION_1' })
+        })
 
-  it("on dispatching inside epic handler", function () {
-    const action1 = makeAction();
-    const epic = new Epic(makeEpic(), { counter: 1 });
-    epic.on(action1, function epicHandler1() {
-      EpicStore.dispatch(makeAction());
+        expect(() => {
+            store.dispatch(action1)
+        }).toThrow([invariantError(makeError('epicListener1').get(ErrorMessages.noDispatchInEpicListener))])
+    })
 
-      return {
-        state: { counter: epic.state.counter + 1 }
-      };
-    });
+    it('on dispatching inside epic handler', function () {
+        const action1 = makeAction()
+        const epic = makeOriginalEpic(makeEpic())
+        epic.useReducer(action1, function epicHandler1 () {
+            store.dispatch(makeAction())
 
-    EpicStore.register(epic);
-    expect(() => {
-      EpicStore.dispatch(action1);
-    }).toThrow(invariantError(new RicochetError(epic.name, 'epicHandler1').get(ErrorMessages.noDispatchInEpicUpdater)));
-  });
+            return {
+                state: { counter: epic.state.counter + 1 }
+            }
+        })
 
-  it("on changing state type", function () {
-    const epic = new Epic(makeEpic(), [1, 2, 3]);
-    const action = makeAction();
-    epic.on(action, () => ({ state: { a: 2 } }));
-    EpicStore.register(epic);
+        store.register(epic)
+        expect(() => {
+            store.dispatch(action1)
+        }).toThrow(invariantError(makeError(epic.name, 'epicHandler1').get(ErrorMessages.noDispatchInEpicUpdater)))
+    })
 
-    expect(() => {
-      EpicStore.dispatch(action);
-    }).toThrow(invariantError(new RicochetError(epic.name, 'Listener[0]').get(ErrorMessages.invalidHandlerUpdate)));
-  });
+    it('on changing state type', function () {
+        const epic = makeOriginalEpic(makeEpic())
+        const action1 = makeAction()
+        const action2 = makeAction()
 
-  it("on epic as external action", function () {
-    const epic1 = makeEpic();
-    const epic2 = makeEpic();
-    const action = makeAction();
-    EpicStore.register(makeCounterEpic(epic1, action));
-    EpicStore.register(makeCounterEpic(epic2, action));
-    expect(() => {
-      EpicStore.dispatch(epic1);
-    }).toThrow(invariantError(new RicochetError(epic1).get(ErrorMessages.invalidEpicAction)));
-  });
+        epic.useReducer(action1, () => ({ state: 'asdf' }))
+        epic.useReducer(action2, () => ({ state: { a: 2 } }))
 
-  /* it("on cyclic external action", function () {
+        store.register(epic)
+        store.dispatch(action1)
+
+        expect(() => {
+            store.dispatch(action2)
+        }).toThrow(invariantError(makeError(epic.name, 'R[1]').get(ErrorMessages.invalidHandlerUpdate)))
+    })
+
+    it('on epic as external action', function () {
+        const epic1 = makeEpic()
+        const epic2 = makeEpic()
+        const action = makeAction()
+        store.register(makeCounterEpic(epic1, action))
+        store.register(makeCounterEpic(epic2, action))
+        expect(() => {
+            store.dispatch(epic1)
+        }).toThrow(invariantError(makeError(epic1).get(ErrorMessages.invalidEpicAction)))
+    })
+
+    /* it("on cyclic external action", function () {
     const epic = makeEpic();
     const action = makeAction();
 
-    EpicStore.register(makeCounterEpic(epic, action, {
+    store.register(makeCounterEpic(epic, action, {
       actionsToDispatch: [action] }));
 
     expect(() => {
-      EpicStore.dispatch(action);
-    }).toThrow(invariantError(new RicochetError(action).get(ErrorMessages.noRepeatedExternalAction)));
+      store.dispatch(action);
+    }).toThrow(invariantError(makeError(action).get(ErrorMessages.noRepeatedExternalAction)));
   }); */
-});
+})

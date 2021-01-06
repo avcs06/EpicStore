@@ -58,7 +58,7 @@ export const merge = (() => {
     const makePropSetter = (prop, setter) => s => (s[prop] = setter(s[prop]))
 
     const defaultChanges = { undo: noop, redo: noop }
-    return (_object, object, withUndo, internal = false) => {
+    return (_object, object, withUndo = false, internal = false) => {
         let changes = !internal && defaultChanges
         if (_object !== INITIAL_VALUE) {
             const _isObject = isObject(_object)

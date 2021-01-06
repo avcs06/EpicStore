@@ -1,160 +1,164 @@
-import { createStore } from '../../src/EpicStore';
-import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic';
-import { INITIAL_VALUE } from '../../src/object-utils';
-const EpicStore = createStore({ undo: true, maxUndoStack: 3 });
+import { Store } from '../../../src'
+import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic'
+import { INITIAL_VALUE } from '../../src/object-utils'
+const store = new Store({ undo: true, maxUndoStack: 3 })
 
-describe("Undo: ", function () {
-    it("Should Undo all the states on undo + Max undo + redo", function () {
-        const epic1 = makeEpic();
-        const epic2 = makeEpic();
-        const epic3 = makeEpic();
-        const epic4 = makeEpic();
-        const action = makeAction();
-        EpicStore.register(makeCounterEpic(epic1, action));
-        EpicStore.register(makeCounterEpic(epic2, action));
-        EpicStore.register(makeCounterEpic(epic3, epic1));
-        EpicStore.register(makeCounterEpic(epic4, epic2));
+describe('Undo: ', function () {
+    it('Should Undo all the states on undo + Max undo + redo', function () {
+        const epic1 = makeEpic()
+        const epic2 = makeEpic()
+        const epic3 = makeEpic()
+        const epic4 = makeEpic()
+        const action = makeAction()
+        store.register(makeCounterEpic(epic1, action))
+        store.register(makeCounterEpic(epic2, action))
+        store.register(makeCounterEpic(epic3, epic1))
+        store.register(makeCounterEpic(epic4, epic2))
 
-        expect(EpicStore.getEpicState(epic1).counter).toBe(0);
-        expect(EpicStore.getEpicState(epic2).counter).toBe(0);
-        expect(EpicStore.getEpicState(epic3).counter).toBe(0);
-        expect(EpicStore.getEpicState(epic4).counter).toBe(0);
+        expect(getEpicState(store, epic1).counter).toBe(0)
+        expect(getEpicState(store, epic2).counter).toBe(0)
+        expect(getEpicState(store, epic3).counter).toBe(0)
+        expect(getEpicState(store, epic4).counter).toBe(0)
 
-        EpicStore.dispatch(action);
-        EpicStore.dispatch(action);
-        EpicStore.dispatch(action);
-        EpicStore.dispatch(action);
-        expect(EpicStore.getEpicState(epic1).counter).toBe(4);
-        expect(EpicStore.getEpicState(epic2).counter).toBe(4);
-        expect(EpicStore.getEpicState(epic3).counter).toBe(4);
-        expect(EpicStore.getEpicState(epic4).counter).toBe(4);
+        store.dispatch(action)
+        store.dispatch(action)
+        store.dispatch(action)
+        store.dispatch(action)
+        expect(getEpicState(store, epic1).counter).toBe(4)
+        expect(getEpicState(store, epic2).counter).toBe(4)
+        expect(getEpicState(store, epic3).counter).toBe(4)
+        expect(getEpicState(store, epic4).counter).toBe(4)
 
-        EpicStore.undo();
-        expect(EpicStore.getEpicState(epic1).counter).toBe(3);
-        expect(EpicStore.getEpicState(epic2).counter).toBe(3);
-        expect(EpicStore.getEpicState(epic3).counter).toBe(3);
-        expect(EpicStore.getEpicState(epic4).counter).toBe(3);
-        EpicStore.undo();
-        EpicStore.undo();
-        EpicStore.undo();
-        expect(EpicStore.getEpicState(epic1).counter).toBe(1);
-        expect(EpicStore.getEpicState(epic2).counter).toBe(1);
-        expect(EpicStore.getEpicState(epic3).counter).toBe(1);
-        expect(EpicStore.getEpicState(epic4).counter).toBe(1);
+        store.undo()
+        expect(getEpicState(store, epic1).counter).toBe(3)
+        expect(getEpicState(store, epic2).counter).toBe(3)
+        expect(getEpicState(store, epic3).counter).toBe(3)
+        expect(getEpicState(store, epic4).counter).toBe(3)
+        store.undo()
+        store.undo()
+        store.undo()
+        expect(getEpicState(store, epic1).counter).toBe(1)
+        expect(getEpicState(store, epic2).counter).toBe(1)
+        expect(getEpicState(store, epic3).counter).toBe(1)
+        expect(getEpicState(store, epic4).counter).toBe(1)
 
-        EpicStore.redo();
-        EpicStore.redo();
-        EpicStore.redo();
-        expect(EpicStore.getEpicState(epic1).counter).toBe(4);
-        expect(EpicStore.getEpicState(epic2).counter).toBe(4);
-        expect(EpicStore.getEpicState(epic3).counter).toBe(4);
-        expect(EpicStore.getEpicState(epic4).counter).toBe(4);
-    });
+        store.redo()
+        store.redo()
+        store.redo()
+        expect(getEpicState(store, epic1).counter).toBe(4)
+        expect(getEpicState(store, epic2).counter).toBe(4)
+        expect(getEpicState(store, epic3).counter).toBe(4)
+        expect(getEpicState(store, epic4).counter).toBe(4)
+    })
 
-    it("Various Object State Undo", function () {
-        const epic = makeEpic();
-        const action1 = makeAction();
-        const action2 = makeAction();
-        const action3 = makeAction();
-        EpicStore.register({
-            name: epic, state: { a: { b : 1 } }, updaters: [
+    it('Various Object State Undo', function () {
+        const epic = makeEpic()
+        const action1 = makeAction()
+        const action2 = makeAction()
+        const action3 = makeAction()
+        store.register({
+            name: epic,
+            state: { a: { b: 1 } },
+            updaters: [
                 {
                     conditions: [action1, action2, action3],
                     handler: (conditions, { sourceAction: { type } }) => {
                         if (type === action1) {
                             return {
                                 state: { c: 1 }
-                            };
+                            }
                         } else if (type === action2) {
                             return {
                                 state: { a: { b: 2 } }
-                            };
+                            }
                         } else {
                             return {
                                 state: { a: 2 }
-                            };
+                            }
                         }
                     }
                 }
             ]
-        });
-        EpicStore.register(makeCounterEpic(makeEpic(), epic));
+        })
+        store.register(makeCounterEpic(makeEpic(), epic))
 
-        EpicStore.dispatch(action2);
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: { b: 2 } });
+        store.dispatch(action2)
+        expect(getEpicState(store, epic)).toEqual({ a: { b: 2 } })
 
-        EpicStore.dispatch(action1);
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: { b: 2 }, c: 1 });
+        store.dispatch(action1)
+        expect(getEpicState(store, epic)).toEqual({ a: { b: 2 }, c: 1 })
 
-        EpicStore.dispatch(action3);
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: 2, c: 1 });
+        store.dispatch(action3)
+        expect(getEpicState(store, epic)).toEqual({ a: 2, c: 1 })
 
-        EpicStore.undo();
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: { b: 2 }, c: 1 });
+        store.undo()
+        expect(getEpicState(store, epic)).toEqual({ a: { b: 2 }, c: 1 })
 
-        EpicStore.undo();
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: { b: 2 } });
+        store.undo()
+        expect(getEpicState(store, epic)).toEqual({ a: { b: 2 } })
 
-        EpicStore.undo();
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: { b: 1 } });
+        store.undo()
+        expect(getEpicState(store, epic)).toEqual({ a: { b: 1 } })
 
-        EpicStore.redo();
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: { b: 2 } });
+        store.redo()
+        expect(getEpicState(store, epic)).toEqual({ a: { b: 2 } })
 
-        EpicStore.redo();
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: { b: 2 }, c: 1 });
+        store.redo()
+        expect(getEpicState(store, epic)).toEqual({ a: { b: 2 }, c: 1 })
 
-        EpicStore.redo();
-        expect(EpicStore.getEpicState(epic)).toEqual({ a: 2, c: 1 });
-    });
+        store.redo()
+        expect(getEpicState(store, epic)).toEqual({ a: 2, c: 1 })
+    })
 
-    it("Primitive Undo", function () {
-        const epic = makeEpic();
-        const action1 = makeAction();
-        const action2 = makeAction();
-        const action3 = makeAction();
-        EpicStore.register({
-            name: epic, state: null, updaters: [
+    it('Primitive Undo', function () {
+        const epic = makeEpic()
+        const action1 = makeAction()
+        const action2 = makeAction()
+        const action3 = makeAction()
+        store.register({
+            name: epic,
+            state: null,
+            updaters: [
                 {
                     conditions: [action1, action2, action3],
                     handler: (conditions, { sourceAction: { type } }) => {
                         if (type === action1) {
-                            return { state: [1, 2, 3] };
+                            return { state: [1, 2, 3] }
                         } else if (type === action2) {
-                            return { state: 'a' };
+                            return { state: 'a' }
                         } else {
-                            return { state: Function.prototype };
+                            return { state: Function.prototype }
                         }
                     }
                 }
             ]
-        });
+        })
 
-        EpicStore.dispatch(action1);
-        expect(EpicStore.getEpicState(epic)).toEqual([1, 2, 3]);
+        store.dispatch(action1)
+        expect(getEpicState(store, epic)).toEqual([1, 2, 3])
 
-        EpicStore.dispatch(action2);
-        expect(EpicStore.getEpicState(epic)).toEqual('a');
+        store.dispatch(action2)
+        expect(getEpicState(store, epic)).toEqual('a')
 
-        EpicStore.dispatch(action3);
-        expect(EpicStore.getEpicState(epic)).toEqual(Function.prototype);
+        store.dispatch(action3)
+        expect(getEpicState(store, epic)).toEqual(Function.prototype)
 
-        EpicStore.undo();
-        expect(EpicStore.getEpicState(epic)).toEqual('a');
+        store.undo()
+        expect(getEpicState(store, epic)).toEqual('a')
 
-        EpicStore.undo();
-        expect(EpicStore.getEpicState(epic)).toEqual([1, 2, 3]);
+        store.undo()
+        expect(getEpicState(store, epic)).toEqual([1, 2, 3])
 
-        EpicStore.undo();
-        expect(EpicStore.getEpicState(epic)).toEqual(INITIAL_VALUE);
+        store.undo()
+        expect(getEpicState(store, epic)).toEqual(INITIAL_VALUE)
 
-        EpicStore.redo();
-        expect(EpicStore.getEpicState(epic)).toEqual([1, 2, 3]);
+        store.redo()
+        expect(getEpicState(store, epic)).toEqual([1, 2, 3])
 
-        EpicStore.redo();
-        expect(EpicStore.getEpicState(epic)).toEqual('a');
+        store.redo()
+        expect(getEpicState(store, epic)).toEqual('a')
 
-        EpicStore.redo();
-        expect(EpicStore.getEpicState(epic)).toEqual(Function.prototype);
-    });
-});
+        store.redo()
+        expect(getEpicState(store, epic)).toEqual(Function.prototype)
+    })
+})

@@ -5,7 +5,7 @@ import * as utils from './object'
 import { makeUpdater } from './reducer'
 import { getActionFrom, withPayload } from './action'
 import { getConditionFrom } from './condition'
-import { RicochetError, ErrorMessages } from './errors'
+import { makeError, ErrorMessages } from './errors'
 import { registerStoreToEpic, unregisterStoreFromEpic } from './epicStore'
 
 import type {
@@ -149,7 +149,7 @@ const makeStoreMetaInfo = (options?: StoreParams):StoreMetaInfo => {
 
 export const addUpdaterToStore = ({ meta }: Store, updater: Reducer) => {
     const { conditions, name, epic: epicName } = updater
-    const error = new RicochetError(epicName, name)
+    const error = makeError(epicName, name)
 
     // validate conditions (Heavy)
     invariant(!conditions.reduce((a, c: AnyCondition) => {
@@ -256,7 +256,7 @@ const processStoreListeners = ({ meta }: Store, epicCache, sourceAction, options
             // If there are required conditions all of them should change
             if (hasChangedActive) {
                 if (options) {
-                    options.error = new RicochetError(listener.name)
+                    options.error = makeError(listener.name)
                 }
 
                 const handlerParams = (conditions as InternalCondition[]).map(c => (
@@ -275,7 +275,7 @@ const processStoreListeners = ({ meta }: Store, epicCache, sourceAction, options
     })
 
     storeListenerCache.forEach(listener => {
-        listener.conditions.forEach(resetOrUpdateCondition.bind(null, true))
+        listener.conditions.forEach(condition => resetOrUpdateCondition(condition, true))
         delete listener.processed
     })
 
@@ -309,7 +309,7 @@ export const createStore = (options?: StoreParams): Store => {
     return Object.assign(store, {
         register (epic) {
             const { name, reducers, state } = epic
-            const error = new RicochetError(name)
+            const error = makeError(name)
             invariant(!meta.epicRegistry[name],
                 error.get(ErrorMessages.duplicateEpic))
 
@@ -351,7 +351,7 @@ export const createStore = (options?: StoreParams): Store => {
 
         dispatch: (() => {
             let sourceAction, epicCache, actionCache, conditionCache, inCycle, afterCycle, undoEntry
-            const options = { error: new RicochetError() }
+            const options = { error: makeError() }
 
             const processUpdater = (updater, action, external, pattern?): Action => {
                 const [{ epic: epicName, name, conditions, handler }, conditionIndex] = updater
@@ -421,7 +421,7 @@ export const createStore = (options?: StoreParams): Store => {
                 })
 
                 // to throw error if handler dispatches a new action
-                options.error = new RicochetError(epicName, name)
+                options.error = makeError(epicName, name)
 
                 const epic = meta.epicRegistry[epicName]
                 epic._state = epic.hasOwnProperty('_state') ? epic._state : epic.state
@@ -438,7 +438,7 @@ export const createStore = (options?: StoreParams): Store => {
                                     merge(clone(epic['_' + entity]), handlerUpdate[entity], meta.undoEnabled)
                             } catch (e) {
                                 invariant(e !== MERGE_ERROR,
-                                    new RicochetError(epicName, name).get(ErrorMessages.invalidHandlerUpdate))
+                                    makeError(epicName, name).get(ErrorMessages.invalidHandlerUpdate))
                                 throw e
                             }
 
@@ -473,11 +473,11 @@ export const createStore = (options?: StoreParams): Store => {
                 if (external) {
                     // throw if epic is triggered as an external action
                     invariant(!meta.epicRegistry[action.type],
-                        new RicochetError(action.type).get(ErrorMessages.invalidEpicAction))
+                        makeError(action.type).get(ErrorMessages.invalidEpicAction))
 
                     /*  // throw if repeated external action in same cycle
                     invariant(!actionCache.hasOwnProperty(action.type),
-                        new RicochetError(action.type).get(ErrorMessages.noRepeatedExternalAction)) */
+                        makeError(action.type).get(ErrorMessages.noRepeatedExternalAction)) */
 
                     actionCache[action.type] = action.payload
                 }
@@ -647,7 +647,7 @@ export const createStore = (options?: StoreParams): Store => {
 // debug utils
 const getEpic = ({ meta }: Store, epicName, key) => {
     const epic = meta.epicRegistry[epicName]
-    return epic ? epic[key] : null
+    return epic ? epic[key] : undefined
 }
 
 export const getEpicState = (store: Store, epicName) => {
@@ -656,6 +656,12 @@ export const getEpicState = (store: Store, epicName) => {
 
 export const getEpicScope = (store: Store, epicName) => {
     return getEpic(store, epicName, 'scope')
+}
+
+export const getUpdaterConditions = (store: Store, epicName, name) => {
+    const updaters = getEpic(store, epicName, 'reducers')
+    const updater = (updaters || []).find(({ name: n }) => name === n)
+    return updater?.conditions.map(condition => ({ ...condition }))
 }
 
 export const getStoreListeners = ({ meta }: Store, conditionType) => {

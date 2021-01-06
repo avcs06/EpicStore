@@ -26,7 +26,7 @@ export const makeUpdater = (condition: ReducerCondition, handler: ReducerHandler
     }
 
     return {
-        name: handler.name || 'anonymous',
+        name: (handler.name.replace(/bound/ig, '')).trim() || 'anonymous',
         conditions: inputConditions,
         handler: function (values, metadata) {
             let outputValues
@@ -45,7 +45,7 @@ export const makeUpdater = (condition: ReducerCondition, handler: ReducerHandler
                 break
             }
 
-            return handler.bind(this)(outputValues, metadata)
+            return handler(outputValues, metadata)
         }
     }
 }

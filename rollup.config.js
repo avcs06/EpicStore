@@ -1,19 +1,20 @@
-import commonjs from 'rollup-plugin-commonjs';
-import resolve from 'rollup-plugin-node-resolve';
-import babel from 'rollup-plugin-babel';
+import commonjs from 'rollup-plugin-commonjs'
+import resolve from 'rollup-plugin-node-resolve'
+import babel from 'rollup-plugin-babel'
 
-const extensions = ['.js', '.ts'];
+const extensions = ['.js', '.ts']
 export default {
     input: {
-        'Action': 'src/Action.ts',
-        'Condition': 'src/Condition.ts',
-        'Updater': 'src/Updater.ts',
-        'Store': 'src/Store.ts',
+        action: 'src/action.ts',
+        condition: 'src/condition.ts',
+        reducer: 'src/reducer.ts',
+        store: 'src/store.ts',
+        epic: 'src/epic.ts'
     },
 
     // Specify here external modules which you don't want to include in your bundle (for instance: 'lodash', 'moment' etc.)
     // https://rollupjs.org/guide/en#external-e-external
-    external: ['memoizee', 'invariant', 'core-js/es/symbol'],
+    external: ['memoizee', 'invariant'],
 
     plugins: [
         // Allows node_modules resolution
@@ -23,7 +24,7 @@ export default {
         commonjs(),
 
         // Compile TypeScript/JavaScript files
-        babel({ extensions, include: ['src/**/*'] }),
+        babel({ extensions, include: ['src/**/*'] })
     ],
 
     output: [{
@@ -34,5 +35,5 @@ export default {
         dir: 'es',
         format: 'es',
         exports: 'named'
-    }],
-};
+    }]
+}
