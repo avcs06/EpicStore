@@ -4,7 +4,7 @@ import * as utils from './object'
 
 import { makeUpdater } from './reducer'
 import { getActionFrom, withPayload } from './action'
-import { getConditionFrom } from './condition'
+import { fromString, getConditionFrom } from './condition'
 import { makeError, ErrorMessages } from './errors'
 import { registerStoreToEpic, unregisterStoreFromEpic } from './epicStore'
 
@@ -429,7 +429,7 @@ export const createStore = (options?: StoreParams): Store => {
 
                 let stateUpdated = false
                 splitNestedValues(handlerParams).forEach(handlerParams => {
-                    const handlerUpdate = handler.call(epic, handlerParams, sourceAction) || {}
+                    const handlerUpdate = handler(handlerParams, sourceAction) || {}
                     const handleUpdate = (entity, callback = Function.prototype) => {
                         if (handlerUpdate.hasOwnProperty(entity)) {
                             let updatedValue, changes
@@ -458,7 +458,7 @@ export const createStore = (options?: StoreParams): Store => {
                     handleUpdate('scope')
                     handleUpdate('state', () => {
                         epicCache[epicName] = epic._state
-                        if (pattern !== '*' && !handlerUpdate.passive) {
+                        if (pattern?._original !== '*' && !handlerUpdate.passive) {
                             stateUpdated = true
                         }
                     })
@@ -592,30 +592,39 @@ export const createStore = (options?: StoreParams): Store => {
             const updater = makeUpdater(condition, handler as ReducerHandler)
             const { conditions } = updater
 
+            const error = makeError(updater.name)
+            invariant(!conditions.reduce((a, c: AnyCondition) => {
+                const readonly = (c as Condition).readonly
+                const type = (c as Condition).type || (c as string)
+                invariant(!(/\*/.test(type) && readonly), error.get(ErrorMessages.invalidListenerPattern))
+                return a && readonly
+            }, true), error.get(ErrorMessages.noReadonlyListeners))
+
             // register conditions
-            updater.conditions = _mapCondition(conditions, (inputCondition: InputCondition, i) => {
-                const condition = processCondition(inputCondition)
-                const { type, patternRegex } = condition
+            updater.conditions = (conditions as InputCondition[])
+                .map((inputCondition: InputCondition, i) => {
+                    const condition = processCondition(fromString(inputCondition))
+                    const { type, patternRegex } = condition
 
-                if (!patternRegex) {
-                    if (meta.epicRegistry[type]) {
-                        condition.value = getSelectorValue(condition, {
-                            type, payload: meta.epicRegistry[type].state
-                        })
-                    } else meta.pendingEpics.add(type)
-                }
+                    if (!patternRegex) {
+                        if (meta.epicRegistry[type]) {
+                            condition.value = getSelectorValue(condition, {
+                                type, payload: meta.epicRegistry[type].state
+                            })
+                        } else meta.pendingEpics.add(type)
+                    }
 
-                let registry = meta.storeListeners
-                if (meta.patternsEnabled && patternRegex) { registry = meta.pStoreListeners }
+                    let registry = meta.storeListeners
+                    if (meta.patternsEnabled && patternRegex) { registry = meta.pStoreListeners }
 
-                if (!registry[type]) registry[type] = []
-                registry[type].push([updater, i])
-                return condition
-            })
+                    if (!registry[type]) registry[type] = []
+                    registry[type].push([updater, i])
+                    return condition
+                })
 
             return () => {
                 meta.sRegistries.forEach(registry => {
-                    _mapCondition(updater.conditions, ({ type }) => {
+                    (updater.conditions as Condition[]).forEach(({ type }) => {
                         registry[type] &&
                             (registry[type] =
                                 registry[type].filter(([u]) => updater !== u))
@@ -624,41 +633,37 @@ export const createStore = (options?: StoreParams): Store => {
             }
         },
 
-        get undo () {
+        undo () {
             if (meta.undoEnabled) {
-                return () => {
-                    const epicCache = handleUndoChange(this, meta.undoStack, meta.redoStack, 'undo')
-                    processStoreListeners(this, epicCache, UNDO_ACTION)
-                }
+                const epicCache = handleUndoChange(this, meta.undoStack, meta.redoStack, 'undo')
+                processStoreListeners(this, epicCache, UNDO_ACTION)
             }
         },
 
-        get redo () {
+        redo () {
             if (meta.undoEnabled) {
-                return () => {
-                    const epicCache = handleUndoChange(this, meta.redoStack, meta.undoStack, 'redo')
-                    processStoreListeners(this, epicCache, REDO_ACTION)
-                }
+                const epicCache = handleUndoChange(this, meta.redoStack, meta.undoStack, 'redo')
+                processStoreListeners(this, epicCache, REDO_ACTION)
             }
         }
     })
 }
 
 // debug utils
-const getEpic = ({ meta }: Store, epicName, key) => {
-    const epic = meta.epicRegistry[epicName]
+const getEpic = ({ meta }: Store, epicName: Epic | string, key) => {
+    const epic = meta.epicRegistry[(epicName as Epic).name || (epicName as string)]
     return epic ? epic[key] : undefined
 }
 
-export const getEpicState = (store: Store, epicName) => {
+export const getEpicState = (store, epicName) => {
     return getEpic(store, epicName, 'state')
 }
 
-export const getEpicScope = (store: Store, epicName) => {
+export const getEpicScope = (store, epicName) => {
     return getEpic(store, epicName, 'scope')
 }
 
-export const getUpdaterConditions = (store: Store, epicName, name) => {
+export const getUpdaterConditions = (store, epicName, name) => {
     const updaters = getEpic(store, epicName, 'reducers')
     const updater = (updaters || []).find(({ name: n }) => name === n)
     return updater?.conditions.map(condition => ({ ...condition }))

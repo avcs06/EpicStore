@@ -11,6 +11,8 @@ export const makeAction = make('action')
 
 export const makeCounterEpic = (epicName, conditions, additionalParams: any = {}) => {
     const {
+        state = null,
+        scope = null,
         stateChange = state => ({ counter: (state.counter || 0) + 1 }),
         scopeChange = scope => ({ counter: (scope.counter || 0) + 1 }),
         actionsToDispatch = [],
@@ -18,6 +20,9 @@ export const makeCounterEpic = (epicName, conditions, additionalParams: any = {}
     } = additionalParams
 
     const epic = makeOriginalEpic(epicName)
+    epic.useState(state)
+    epic.useScope(scope)
+
     epic.useReducer(resolve([
         ...(conditions ? conditions.constructor === Array ? conditions : [conditions] : [])
     ]), function (conditions) {

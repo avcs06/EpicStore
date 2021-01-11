@@ -131,4 +131,23 @@ describe('Epic Listeners: ', function () {
         removeListener1()
         expect(() => removeListener2()).not.toThrow()
     })
+
+    it('Epic listeners using strings', function () {
+        const epic1 = makeEpic()
+        const epic2 = makeEpic()
+        const action1 = makeAction()
+        const action2 = makeAction()
+        const listenerSpy = jasmine.createSpy('listener')
+
+        store.register(makeCounterEpic(epic1, action1))
+        store.register(makeCounterEpic(epic2, action2))
+        store.addListener(resolve([`${epic1}.counter`, `readonly:${epic2}.counter`]), listenerSpy)
+
+        store.dispatch(action1)
+        expect(listenerSpy).toHaveBeenCalledTimes(1)
+        expect(listenerSpy).toHaveBeenCalledWith([1, undefined], jasmine.any(Object))
+
+        store.dispatch(action2)
+        expect(listenerSpy).toHaveBeenCalledTimes(1)
+    })
 })

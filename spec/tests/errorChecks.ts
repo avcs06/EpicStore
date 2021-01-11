@@ -123,6 +123,28 @@ describe('Invalid Entries: should throw error', function () {
         }).toThrow(invariantError(makeError(epic1).get(ErrorMessages.invalidEpicAction)))
     })
 
+    it('on multiple initial set state', function () {
+        const epic = makeEpic()
+        const action = makeAction()
+        const counterEpic = makeCounterEpic(epic, action, { state: { counter: 0 } })
+        store.register(counterEpic)
+
+        expect(() => {
+            counterEpic.useState(null)
+        }).toThrow(invariantError(makeError(epic).get(ErrorMessages.invalidMultipleSetState)))
+    })
+
+    it('on multiple initial set scope', function () {
+        const epic = makeEpic()
+        const action = makeAction()
+        const counterEpic = makeCounterEpic(epic, action, { scope: { counter: 0 } })
+        store.register(counterEpic)
+
+        expect(() => {
+            counterEpic.useScope(null)
+        }).toThrow(invariantError(makeError(epic).get(ErrorMessages.invalidMultipleSetScope)))
+    })
+
     /* it("on cyclic external action", function () {
     const epic = makeEpic();
     const action = makeAction();

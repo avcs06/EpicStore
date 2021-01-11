@@ -41,3 +41,22 @@ export const withSelector = (condition: InputCondition, selector: Condition['sel
 export const withGuard = (condition: InputCondition, guard: Condition['guard']): Condition => {
     return Object.assign(getConditionFrom(condition), { guard })
 }
+
+export const fromString = (condition: InputCondition) => {
+    if (typeof condition !== 'string') return condition
+
+    let readonly = false
+    if (/^readonly:/.test(condition)) {
+        condition = condition.split(':')[1]
+        readonly = true
+    }
+
+    let selector
+    const splits = condition.split('.')
+    if (splits.length > 1) {
+        condition = splits.shift()
+        selector = state => splits.reduce((a, c) => a[c], state)
+    }
+
+    return { type: condition, readonly, selector }
+}

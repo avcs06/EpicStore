@@ -22,7 +22,23 @@ describe('Basic functionalities', function () {
         expect(getEpicScope(store, epic).counter).toBe(2)
     })
 
-    it('Should unregister epic', function () {
+    it('Unnamed Epic', function () {
+        const action = makeAction()
+        const epic = makeOriginalEpic()
+
+        epic.useState({ counter: 1 })
+        epic.useReducer(action, function () {
+            return { state: { counter: this.state.counter + 1 } }
+        })
+
+        store.register(epic)
+
+        expect(getEpicState(store, epic).counter).toBe(1)
+        store.dispatch(action)
+        expect(getEpicState(store, epic).counter).toBe(2)
+    })
+
+    it('Unregister epic', function () {
         const epic = makeEpic()
         const action = makeAction()
         const verify = jasmine.createSpy('verify')
@@ -130,5 +146,105 @@ describe('Basic functionalities', function () {
 
         store.dispatch(action)
         expect(handlerSpy).not.toHaveBeenCalled()
+    })
+
+    it('Multiple Stores, multiple epics', function () {
+        const action = makeAction()
+        const store1 = createStore()
+
+        const epic = makeOriginalEpic()
+        epic.useReducer(action, function () {
+            return { state: { counter: (this.state.counter || 0) + 1 } }
+        })
+
+        const epic1 = makeOriginalEpic()
+        epic1.useReducer(action, function () {
+            return { state: { counter: (this.state.counter || 0) + 1 } }
+        })
+
+        store.register(epic)
+        store1.register(epic1)
+
+        expect(getEpicState(store, epic).counter).toBe(undefined)
+        expect(getEpicState(store1, epic1).counter).toBe(undefined)
+
+        store.dispatch(action)
+        expect(getEpicState(store, epic).counter).toBe(1)
+        expect(getEpicState(store1, epic1).counter).toBe(undefined)
+
+        store1.dispatch(action)
+        expect(getEpicState(store, epic).counter).toBe(1)
+        expect(getEpicState(store1, epic1).counter).toBe(1)
+
+        store.unregister(epic)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic1).counter).toBe(1)
+
+        store.dispatch(action)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic1).counter).toBe(1)
+
+        store1.dispatch(action)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic1).counter).toBe(2)
+
+        store1.unregister(epic1)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic1)).toBe(undefined)
+
+        store.dispatch(action)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic1)).toBe(undefined)
+
+        store1.dispatch(action)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic1)).toBe(undefined)
+    })
+
+    it('Multiple Stores, same epic', function () {
+        const action = makeAction()
+        const store1 = createStore()
+
+        const epic = makeOriginalEpic()
+        epic.useReducer(action, function () {
+            return { state: { counter: (this.state.counter || 0) + 1 } }
+        })
+        store.register(epic)
+        store1.register(epic)
+
+        expect(getEpicState(store, epic).counter).toBe(undefined)
+        expect(getEpicState(store1, epic).counter).toBe(undefined)
+
+        store.dispatch(action)
+        expect(getEpicState(store, epic).counter).toBe(1)
+        expect(getEpicState(store1, epic).counter).toBe(1)
+
+        store1.dispatch(action)
+        expect(getEpicState(store, epic).counter).toBe(2)
+        expect(getEpicState(store1, epic).counter).toBe(2)
+
+        store.unregister(epic)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic).counter).toBe(2)
+
+        store.dispatch(action)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic).counter).toBe(2)
+
+        store1.dispatch(action)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic).counter).toBe(3)
+
+        store1.unregister(epic)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic)).toBe(undefined)
+
+        store.dispatch(action)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic)).toBe(undefined)
+
+        store1.dispatch(action)
+        expect(getEpicState(store, epic)).toBe(undefined)
+        expect(getEpicState(store1, epic)).toBe(undefined)
     })
 })

@@ -53,6 +53,8 @@ export interface Epic {
     readonly state: any
     readonly scope: any
     readonly reducers: Reducer[]
+    readonly useState: ((state: any) => void)
+    readonly useScope: ((scope: any) => void)
     readonly useReducer: (condition: ReducerCondition, handler: ReducerHandler) => () => void
 }
 
@@ -120,6 +122,6 @@ export interface Store {
     readonly unregister: (epic: string | Epic) => void
     readonly dispatch: (action: InputAction) => void
     readonly addListener: (condition: ReducerCondition, handler: StoreHandler) => () => void
-    readonly undo: () => (() => void) | void
-    readonly redo: () => (() => void) | void
+    readonly undo: () => void
+    readonly redo: () => void
 }
