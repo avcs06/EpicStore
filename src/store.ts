@@ -41,7 +41,7 @@ const processAction = ($0: InputAction): InternalAction => {
 }
 
 const processCondition = ($0: InputCondition): InternalCondition => {
-    const condition = getConditionFrom($0) as InternalCondition
+    const condition = getConditionFrom(fromString($0)) as InternalCondition
 
     if (condition.selector) {
         condition.selector = memoize(condition.selector, { max: 1 })
@@ -622,7 +622,7 @@ export const createStore = (options?: StoreParams): Store => {
             // register conditions
             updater.conditions = (conditions as InputCondition[])
                 .map((inputCondition: InputCondition, i) => {
-                    const condition = processCondition(fromString(inputCondition))
+                    const condition = processCondition(inputCondition)
                     const { type, patternRegex } = condition
 
                     if (!patternRegex) {
