@@ -1,4 +1,5 @@
-# Ricochet
+![alt text](https://github.com/avcs06/Ricochet/blob/master/ricochet.jpg?raw=true)
+
 Ricochet is an event based state management framework. Epic is a basic building block of Ricochet. Each Epic is a state, it listens for User Actions or changes in other Epics and updates it's own state. User can subscribe to changes in Epic directly.
 
 ## Store
