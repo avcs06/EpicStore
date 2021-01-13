@@ -123,9 +123,10 @@ const REDO_ACTION = { type: 'STORE_REDO' }
 
 const makeStoreMetaInfo = (options?: StoreParams):StoreMetaInfo => {
     return {
-        undoEnabled: Boolean(options?.undo),
         patternsEnabled: Boolean(options?.patterns),
+        undoEnabled: Boolean(options?.undo),
         undoMaxStack: (options?.undo as UndoParams)?.maxStack || 10,
+        manualUndoPoints: Boolean((options?.undo as UndoParams)?.manualUndoPoints),
 
         epicRegistry: {},
         pendingEpics: new Set(),
@@ -302,6 +303,20 @@ const handleUndoChange = ({ meta }: Store, from, to, key) => {
     return epicCache
 }
 
+const updateReducerConditions = ({ meta }: Store, epicCache) => {
+    Object.keys(epicCache).forEach(epicName => {
+        const reducers = meta.updaterRegistry.get(epicName) || []
+        reducers.forEach(reducerList => {
+            reducerList.forEach(([reducer, index]) => {
+                const condition = reducer.conditions[index]
+                condition.value = getSelectorValue(condition, {
+                    type: epicName, payload: epicCache[epicName]
+                })
+            })
+        })
+    })
+}
+
 export const createStore = (options?: StoreParams): Store => {
     const meta = makeStoreMetaInfo(options)
     const store = { meta }
@@ -320,13 +335,17 @@ export const createStore = (options?: StoreParams): Store => {
             if (meta.pendingEpics.has(name)) {
                 meta.pendingEpics.delete(name)
 
-                const iterator = ([updater, i]) =>
-                    (updater[i].value = getSelectorValue(updater[i], {
+                const iterator = ([reducer, i]) => {
+                    const condition = reducer.conditions[i]
+                    condition.value = getSelectorValue(condition, {
                         type: name, payload: state
-                    }))
+                    })
+                }
 
                 _forEachUpdater(meta.updaterRegistry.get(name), iterator)
-                meta.storeListeners[name].forEach(iterator)
+                if (meta.storeListeners[name]) {
+                    meta.storeListeners[name].forEach(iterator)
+                }
             }
         },
 
@@ -548,9 +567,9 @@ export const createStore = (options?: StoreParams): Store => {
                         meta.redoStack = []
 
                         // If fresh undopoint create a new entry, else merge to previous entry
-                        if ((action as Action).createUndoPoint || !meta.undoStack.length) {
-                            if (meta.undoStack.length === meta.undoMaxStack) { meta.undoStack.shift() }
-
+                        if (!meta.undoStack.length ||
+                            (meta.manualUndoPoints ? action.createUndoPoint : !action.skipUndoPoint)) {
+                            if (meta.undoStack.length === meta.undoMaxStack) meta.undoStack.shift()
                             meta.undoStack.push(undoEntry)
                         } else {
                             const currentEntry = undoEntry
@@ -637,6 +656,7 @@ export const createStore = (options?: StoreParams): Store => {
             if (meta.undoEnabled) {
                 const epicCache = handleUndoChange(this, meta.undoStack, meta.redoStack, 'undo')
                 processStoreListeners(this, epicCache, UNDO_ACTION)
+                updateReducerConditions(this, epicCache)
             }
         },
 
@@ -644,6 +664,7 @@ export const createStore = (options?: StoreParams): Store => {
             if (meta.undoEnabled) {
                 const epicCache = handleUndoChange(this, meta.redoStack, meta.undoStack, 'redo')
                 processStoreListeners(this, epicCache, REDO_ACTION)
+                updateReducerConditions(this, epicCache)
             }
         }
     })

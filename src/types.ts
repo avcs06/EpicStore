@@ -4,6 +4,7 @@ export interface Action {
     payload?: any
     target?: string | Epic
     createUndoPoint?: boolean
+    skipUndoPoint?: boolean
 }
 
 export type InputAction = string | Action
@@ -89,23 +90,25 @@ interface InternalUpdater extends Reducer {
     processed?: boolean
 }
 
-type UpdaterList = [InternalUpdater, number][]
-type UpdaterMap = Map<string, UpdaterList>
+type ReducerList = [InternalUpdater, number][]
+type ReducerMap = Map<string, ReducerList>
 
 export interface StoreMetaInfo {
     undoEnabled: boolean
+    manualUndoPoints: boolean
+
     patternsEnabled: boolean
     undoMaxStack: number
 
     epicRegistry: { [key: string]: InternalEpic }
     pendingEpics: Set<string>
 
-    updaterRegistry: Map<string, UpdaterMap>
-    pUpdaterRegistry: Map<RegExp, UpdaterMap>
+    updaterRegistry: Map<string, ReducerMap>
+    pUpdaterRegistry: Map<RegExp, ReducerMap>
     readonly uRegistries: any[]
 
-    storeListeners: { [key: string]: UpdaterList }
-    pStoreListeners: { [key: string]: UpdaterList }
+    storeListeners: { [key: string]: ReducerList }
+    pStoreListeners: { [key: string]: ReducerList }
     readonly sRegistries: any[]
 
     undoStack: (() => void)[]

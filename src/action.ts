@@ -15,3 +15,7 @@ export const withTarget = (action: InputAction, target: Action['target']): Actio
 export const withUndoPoint = (action: InputAction): Action => {
     return Object.assign(getActionFrom(action), { createUndoPoint: true })
 }
+
+export const withoutUndoPoint = (action: InputAction): Action => {
+    return Object.assign(getActionFrom(action), { skipUndoPoint: true })
+}

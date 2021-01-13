@@ -1,5 +1,5 @@
 
-import { createStore, makeEpic as makeOriginalEpic } from '../../src'
+import { anyOf, createStore, makeEpic as makeOriginalEpic } from '../../src'
 import { getEpicScope, getEpicState, getStoreListeners, getUpdaterConditions } from '../../src/store'
 import { makeEpic, makeAction, makeCounterEpic } from '../helpers/makeEpic'
 const store = createStore()
@@ -53,6 +53,11 @@ describe('Basic functionalities', function () {
 
     it('Unregister should handle non existant epic gracefully', function () {
         expect(() => store.unregister('AVCS')).not.toThrow()
+    })
+
+    it('Undo, redo should be handled gracefully without undoEnabled', function () {
+        expect(() => store.undo()).not.toThrow()
+        expect(() => store.redo()).not.toThrow()
     })
 
     it('Should dispatch epic action on epic state update', function () {
@@ -246,5 +251,50 @@ describe('Basic functionalities', function () {
         store1.dispatch(action)
         expect(getEpicState(store, epic)).toBe(undefined)
         expect(getEpicState(store1, epic)).toBe(undefined)
+    })
+
+    it('Delayed epic register', function () {
+        const epic1 = makeEpic()
+        const epic2 = makeEpic()
+        const epic3 = makeEpic()
+        const action = makeAction()
+
+        expect(() => store.register(makeCounterEpic(epic3, epic2))).not.toThrow()
+        expect(() => store.register(makeCounterEpic(epic2, epic1))).not.toThrow()
+        expect(() => store.addListener(epic1, () => null)).not.toThrow()
+
+        store.register(makeCounterEpic(epic1, action, { state: 1 }))
+        expect(getUpdaterConditions(store, epic2, 'R[0]')[0].value).toBe(1)
+        expect(getStoreListeners(store, epic1)[0].conditions[0].value).toBe(1)
+    })
+
+    it('Multiple reducers', function () {
+        const action1 = makeAction()
+        const action2 = makeAction()
+
+        const epic = makeOriginalEpic()
+        store.register(epic)
+
+        epic.useState(1)
+        epic.useReducer(action1, function () {
+            return {
+                state: this._state + 1
+            }
+        })
+        epic.useReducer(anyOf(action1, action2), function () {
+            return {
+                state: this._state + 2
+            }
+        })
+
+        expect(getEpicState(store, epic)).toBe(1)
+        store.dispatch(action1)
+        expect(getEpicState(store, epic)).toBe(4)
+        store.dispatch(action2)
+        expect(getEpicState(store, epic)).toBe(6)
+        store.dispatch(action1)
+        expect(getEpicState(store, epic)).toBe(9)
+        store.dispatch(action2)
+        expect(getEpicState(store, epic)).toBe(11)
     })
 })
